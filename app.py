@@ -53,3 +53,5 @@ def delete_expense(id):
 
 if __name__ == "__main__":
     app.run(debug=True, port=5001)
+
+# ollama launch claude --model qwen2.5-coder:7b
