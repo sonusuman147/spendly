@@ -20,7 +20,7 @@
     </p>
     <div class="hero-actions">
         <a href="{{ url_for('register') }}" class="btn-primary">Create free account</a>
-        <a href="#" class="btn-secondary">See how it works</a>
+        <a href="javascript:void(0)" class="btn-secondary" onclick="openModal()">See how it works</a>
     </div>
     <div class="hero-visual">
         <div class="dashboard-card">
@@ -73,6 +73,20 @@
     </div>
 </section>
 
+<!-- Video Modal -->
+<div id="videoModal" class="modal-overlay" onclick="closeModalOutside(event)">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+        <div class="modal-video-wrapper">
+            <iframe id="videoIframe" width="100%" height="100%" src=""
+                    frameborder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowfullscreen>
+            </iframe>
+        </div>
+    </div>
+</div>
+
 <section class="features">
     <div class="features-inner">
         <div class="feature-card">
@@ -97,8 +111,40 @@
     <div class="cta-inner">
         <h2 class="cta-title">Ready to take control?</h2>
         <p class="cta-body">Join thousands of people who track their expenses with Spendly.</p>
-        <a href="{{ url_for('register') }}" class="btn-primary">Create free account</a>
+    <a href="{{ url_for('register') }}" class="btn-primary">Create free account</a>
     </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+const YOUTUBE_PLACEHOLDER = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+const modal = document.getElementById("videoModal");
+const iframe = document.getElementById("videoIframe");
+
+function openModal() {
+    iframe.src = YOUTUBE_PLACEHOLDER;
+    modal.classList.add("modal-open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeModal() {
+    iframe.src = "";
+    modal.classList.remove("modal-open");
+    document.body.style.overflow = "";
+}
+
+function closeModalOutside(event) {
+    if (event.target === modal) {
+        closeModal();
+    }
+}
+
+document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && modal.classList.contains("modal-open")) {
+        closeModal();
+    }
+});
+</script>
 {% endblock %}
