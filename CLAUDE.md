@@ -67,7 +67,7 @@ spendly/
 ```bash
 # Setup
 python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+venv\Scripts\activate  # source venv/bin/activate          
 pip install -r requirements.txt
 
 # Run dev server (port 5001)
