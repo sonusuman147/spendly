@@ -109,3 +109,38 @@ def seed_db():
     conn.commit()
     conn.close()
 
+
+def create_user(name, email, password):
+    """Create a new user with a hashed password.
+
+    Hashes the password using werkzeug.security.generate_password_hash,
+    inserts a new row into the users table, and returns the new user's id.
+
+    Raises sqlite3.IntegrityError if the email is already taken (UNIQUE constraint).
+    Uses parameterized queries — safe from SQL injection.
+    """
+    password_hash = generate_password_hash(password)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
+        (name, email, password_hash),
+    )
+    user_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return user_id
+
+
+def get_user_by_email(email):
+    """Look up a user by email address.
+
+    Returns a dictionary of user fields if found, or None if no match.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE email = ?", (email,))
+    user = cursor.fetchone()
+    conn.close()
+    return dict(user) if user else None
