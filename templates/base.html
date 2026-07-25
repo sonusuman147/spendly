@@ -20,6 +20,7 @@
             </a>
             <div class="nav-links">
                 {% if session.user_id %}
+                <a href="{{ url_for('profile') }}">{{ session.user_name }}</a>
                 <a href="{{ url_for('logout') }}">Sign out</a>
                 {% else %}
                 <a href="{{ url_for('login') }}">Sign in</a>
@@ -45,7 +46,9 @@
         </div>
     </footer>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>document.addEventListener("DOMContentLoaded", lucide.createIcons);</script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

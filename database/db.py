@@ -144,3 +144,76 @@ def get_user_by_email(email):
     user = cursor.fetchone()
     conn.close()
     return dict(user) if user else None
+
+
+def get_user_by_id(user_id):
+    """Look up a user by primary key.
+
+    Returns a dictionary of user fields (id, name, email, created_at)
+    if found, or None if no match.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, email, created_at FROM users WHERE id = ?",
+        (user_id,),
+    )
+    user = cursor.fetchone()
+    conn.close()
+    return dict(user) if user else None
+
+
+def get_user_expenses_summary(user_id):
+    """Return a summary dictionary of a user's expenses.
+
+    Returns a dict with:
+      - total_expenses: float — sum of all expense amounts (0.0 if none)
+      - expense_count: int — total number of expenses
+      - category_breakdown: list of {category, total, count} — grouped
+        by category, ordered by total descending
+      - recent_expenses: list of {amount, category, date, description}
+        — last 5 ordered by date then created_at descending
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Total and count
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_expenses, "
+        "COUNT(*) AS expense_count "
+        "FROM expenses WHERE user_id = ?",
+        (user_id,),
+    )
+    totals = dict(cursor.fetchone())
+
+    # Category breakdown
+    cursor.execute(
+        "SELECT category, SUM(amount) AS total, COUNT(*) AS count "
+        "FROM expenses WHERE user_id = ? "
+        "GROUP BY category ORDER BY total DESC",
+        (user_id,),
+    )
+    breakdown = [dict(row) for row in cursor.fetchall()]
+
+    # Recent expenses
+    cursor.execute(
+        "SELECT amount, category, date, description "
+        "FROM expenses WHERE user_id = ? "
+        "ORDER BY date DESC, created_at DESC LIMIT 5",
+        (user_id,),
+    )
+    recent = [dict(row) for row in cursor.fetchall()]
+
+    conn.close()
+
+    top_category = breakdown[0]["category"] if breakdown else "—"
+
+    return {
+        "total_expenses": totals["total_expenses"],
+        "expense_count": totals["expense_count"],
+        "top_category": top_category,
+        "category_breakdown": breakdown,
+        "recent_expenses": recent,
+    }
