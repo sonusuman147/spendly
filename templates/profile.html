@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}Profile — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="profile-section">
+    <div class="profile-container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+            <div class="auth-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <!-- User Info Header -->
+        <div class="profile-header">
+            <div class="profile-avatar">
+                <i data-lucide="user" class="profile-avatar-icon"></i>
+            </div>
+            <div class="profile-header-info">
+                <div class="profile-name">{{ user.name }}</div>
+                <div class="profile-email">{{ user.email }}</div>
+                <div class="profile-member-since">Member since {{ user.created_at[:10] }}</div>
+            </div>
+        </div>
+
+        <!-- Summary Cards Row -->
+        <div class="profile-stats">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <i data-lucide="wallet" class="stat-icon"></i>
+                    <div class="stat-label">Total Spent</div>
+                </div>
+                <div class="stat-value">₹{{ "%.2f"|format(summary.total_expenses) }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <i data-lucide="receipt" class="stat-icon"></i>
+                    <div class="stat-label">Transactions</div>
+                </div>
+                <div class="stat-value">{{ summary.expense_count }}</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-header">
+                    <i data-lucide="trending-up" class="stat-icon"></i>
+                    <div class="stat-label">Top Category</div>
+                </div>
+                <div class="stat-value">{{ summary.top_category }}</div>
+            </div>
+        </div>
+
+        <!-- Two-Column Dashboard -->
+        <div class="profile-dashboard">
+
+            <!-- Recent Transactions -->
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <i data-lucide="receipt" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Recent Transactions</h2>
+                </div>
+                <div class="dashboard-card-body">
+                    {% if summary.recent_expenses %}
+                    <div class="profile-table-wrapper">
+                        <table class="profile-table">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Description</th>
+                                    <th>Category</th>
+                                    <th class="amount-col">Amount</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for exp in summary.recent_expenses %}
+                                <tr>
+                                    <td>{{ exp.date }}</td>
+                                    <td>{{ exp.description or "—" }}</td>
+                                    <td><span class="category-tag cat-{{ exp.category.lower() }}">{{ exp.category }}</span></td>
+                                    <td class="amount-col">₹{{ "%.2f"|format(exp.amount) }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                        <p class="profile-empty">No expenses yet. Start tracking!</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- By Category -->
+            <div class="dashboard-card">
+                <div class="dashboard-card-header">
+                    <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">By Category</h2>
+                </div>
+                <div class="dashboard-card-body">
+                    {% if summary.category_breakdown %}
+                        {% for cat in summary.category_breakdown %}
+                        <div class="category-row">
+                            <span class="category-label">{{ cat.category }}</span>
+                            <div class="category-bar-track">
+                                <div class="category-bar-fill bar-{{ cat.category.lower() }}"
+                                     style="width: {{ (cat.total / summary.total_expenses * 100)|round|int if summary.total_expenses > 0 else 0 }}%">
+                                </div>
+                            </div>
+                            <span class="category-amount">₹{{ "%.2f"|format(cat.total) }}</span>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <p class="profile-empty">No expenses yet. Start tracking!</p>
+                    {% endif %}
+                </div>
+            </div>
+
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>lucide.createIcons();</script>
+{% endblock %}
+

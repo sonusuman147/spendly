@@ -2,7 +2,7 @@ import sqlite3
 
 from flask import Flask, render_template, request, session, flash, redirect, url_for, abort
 from werkzeug.security import check_password_hash
-from database.db import get_db, init_db, seed_db, get_user_by_email, create_user
+from database.db import get_db, init_db, seed_db, get_user_by_email, create_user, get_user_by_id, get_user_expenses_summary
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "spendly-dev-secret-key"
@@ -84,8 +84,9 @@ def login():
 
         # Success — start session and redirect
         session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
         flash("Welcome back!", "success")
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
 
     return render_template("login.html")
 
@@ -113,7 +114,22 @@ def logout():
 
 @app.route("/profile")
 def profile():
-    return "Profile page — coming in Step 4"
+    """Render the profile page with user info and expense summary.
+
+    Requires authentication — redirects to /login if session is missing.
+    Clears orphaned sessions if the user no longer exists.
+    """
+    if not session.get("user_id"):
+        return redirect(url_for("login"))
+
+    user = get_user_by_id(session["user_id"])
+    if user is None:
+        session.clear()
+        flash("Session expired. Please sign in again.", "error")
+        return redirect(url_for("login"))
+
+    summary = get_user_expenses_summary(session["user_id"])
+    return render_template("profile.html", user=user, summary=summary)
 
 
 @app.route("/expenses/add")
