@@ -277,3 +277,94 @@ def get_user_expenses_summary(user_id):
         "category_breakdown": breakdown,
         "recent_expenses": recent,
     }
+
+
+def create_expense(user_id, amount, category, date, description):
+    """Insert a new expense and return its id.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO expenses (user_id, amount, category, date, description) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (user_id, amount, category, date, description),
+    )
+    expense_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return expense_id
+
+
+def get_expenses_by_user(user_id):
+    """Return all expenses for a user, ordered by date then created_at descending.
+
+    Returns a list of dicts. Returns empty list if no expenses exist.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, amount, category, date, description, created_at "
+        "FROM expenses WHERE user_id = ? "
+        "ORDER BY date DESC, created_at DESC",
+        (user_id,),
+    )
+    expenses = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return expenses
+
+
+def get_expense_by_id(expense_id):
+    """Return a single expense by its id, or None if not found.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, amount, category, date, description, created_at "
+        "FROM expenses WHERE id = ?",
+        (expense_id,),
+    )
+    expense = cursor.fetchone()
+    conn.close()
+    return dict(expense) if expense else None
+
+
+def update_expense(expense_id, user_id, amount, category, date, description):
+    """Update an expense row WHERE id = ? AND user_id = ?.
+
+    Returns True if a row was updated, False if no matching row found.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ? "
+        "WHERE id = ? AND user_id = ?",
+        (amount, category, date, description, expense_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def delete_expense(expense_id, user_id):
+    """Delete an expense row WHERE id = ? AND user_id = ?.
+
+    Returns True if a row was deleted, False if no matching row found.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM expenses WHERE id = ? AND user_id = ?",
+        (expense_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0

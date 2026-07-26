@@ -1,0 +1,358 @@
+/* ------------------------------------------------------------------ */
+/* Expenses pages                                                      */
+/* ------------------------------------------------------------------ */
+
+.expenses-section {
+    padding: 2rem;
+    max-width: var(--max-width);
+    margin: 0 auto;
+}
+
+.expenses-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.expenses-title {
+    font-family: var(--font-display);
+    font-size: 1.75rem;
+    color: var(--ink);
+}
+
+.btn-add {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--accent);
+    color: var(--paper);
+    padding: 0.55rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+    text-decoration: none;
+}
+
+.btn-add:hover {
+    background: var(--ink);
+}
+
+/* Expense table */
+.expenses-table-wrapper {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+}
+
+.expenses-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.expenses-table thead {
+    background: var(--paper-warm);
+    border-bottom: 1px solid var(--border);
+}
+
+.expenses-table th {
+    text-align: left;
+    padding: 0.85rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.expenses-table td {
+    padding: 0.85rem 1rem;
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.expenses-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.expenses-table tbody tr:hover {
+    background: var(--accent-light);
+}
+
+.amount-col {
+    text-align: right;
+    font-weight: 600;
+    color: var(--ink) !important;
+}
+
+.actions-col {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.btn-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--paper-card);
+    color: var(--ink-muted);
+    text-decoration: none;
+    transition: all 0.2s;
+    margin-left: 0.5rem;
+}
+
+.btn-action:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+.btn-action-danger:hover {
+    border-color: var(--danger);
+    color: var(--danger);
+    background: var(--danger-light);
+}
+
+/* Category tags */
+.category-tag {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.cat-food { background: #fef3c7; color: #92400e; }
+.cat-transport { background: #dbeafe; color: #1e40af; }
+.cat-bills { background: #fce7f3; color: #9d174d; }
+.cat-health { background: #d1fae5; color: #065f46; }
+.cat-entertainment { background: #ede9fe; color: #5b21b6; }
+.cat-shopping { background: #fce4ec; color: #880e4f; }
+.cat-other { background: #e5e7eb; color: #374151; }
+
+/* Empty state */
+.expenses-empty {
+    text-align: center;
+    padding: 4rem 2rem;
+}
+
+.expenses-empty-icon {
+    font-size: 3rem;
+    color: var(--ink-faint);
+    margin-bottom: 1rem;
+}
+
+.expenses-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.3rem;
+    color: var(--ink-soft);
+    margin-bottom: 0.5rem;
+}
+
+.expenses-empty-text {
+    font-size: 0.9rem;
+    color: var(--ink-muted);
+    margin-bottom: 1.5rem;
+}
+
+/* Expense form */
+.expense-form-section {
+    min-height: calc(100vh - 60px - 100px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+}
+
+.expense-form-container {
+    width: 100%;
+    max-width: var(--auth-width);
+}
+
+.expense-form-card {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+}
+
+.expense-form-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--ink);
+    margin-bottom: 1.5rem;
+}
+
+.form-select {
+    width: 100%;
+    padding: 0.6rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--ink);
+    background: var(--paper);
+    outline: none;
+    transition: border-color 0.2s;
+    appearance: auto;
+}
+
+.form-select:focus {
+    border-color: var(--accent);
+}
+
+.form-textarea {
+    width: 100%;
+    padding: 0.6rem 0.875rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.95rem;
+    color: var(--ink);
+    background: var(--paper);
+    outline: none;
+    transition: border-color 0.2s;
+    resize: vertical;
+    min-height: 80px;
+}
+
+.form-textarea:focus {
+    border-color: var(--accent);
+}
+
+.form-textarea::placeholder,
+.form-select::placeholder {
+    color: var(--ink-faint);
+}
+
+.form-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    margin-top: 1.5rem;
+}
+
+.btn-cancel {
+    display: inline-block;
+    background: transparent;
+    color: var(--ink-muted);
+    padding: 0.65rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+    text-decoration: none;
+    text-align: center;
+}
+
+.btn-cancel:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+/* Delete confirmation */
+.delete-section {
+    min-height: calc(100vh - 60px - 100px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem 2rem;
+}
+
+.delete-container {
+    width: 100%;
+    max-width: 480px;
+}
+
+.delete-card {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 2rem;
+    text-align: center;
+}
+
+.delete-icon {
+    font-size: 3rem;
+    color: var(--danger);
+    margin-bottom: 1rem;
+}
+
+.delete-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--ink);
+    margin-bottom: 0.75rem;
+}
+
+.delete-text {
+    font-size: 0.9rem;
+    color: var(--ink-muted);
+    margin-bottom: 1.5rem;
+    line-height: 1.7;
+}
+
+.delete-details {
+    background: var(--paper-warm);
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    text-align: left;
+}
+
+.delete-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.4rem 0;
+    font-size: 0.85rem;
+}
+
+.delete-detail-label {
+    color: var(--ink-muted);
+    font-weight: 500;
+}
+
+.delete-detail-value {
+    color: var(--ink);
+    font-weight: 600;
+}
+
+.delete-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+}
+
+.btn-danger {
+    display: inline-block;
+    background: var(--danger);
+    color: var(--paper);
+    padding: 0.65rem 1.5rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+    text-decoration: none;
+}
+
+.btn-danger:hover {
+    background: #a93226;
+}

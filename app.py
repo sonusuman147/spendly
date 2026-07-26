@@ -1,11 +1,21 @@
 import os
 import sqlite3
 
+from datetime import date as date_helper
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, session, flash, redirect, url_for, abort
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
-from database.db import get_db, init_db, seed_db, get_user_by_email, create_user, get_user_by_id, get_user_expenses_summary, get_user_by_google_id, link_google_account
+from database.db import (
+    get_db, init_db, seed_db, get_user_by_email, create_user,
+    get_user_by_id, get_user_expenses_summary, get_user_by_google_id,
+    link_google_account, CATEGORIES,
+    create_expense as db_create_expense,
+    get_expenses_by_user as db_get_expenses_by_user,
+    get_expense_by_id as db_get_expense_by_id,
+    update_expense as db_update_expense,
+    delete_expense as db_delete_expense,
+)
 
 load_dotenv()
 
@@ -175,7 +185,7 @@ def google_callback():
 
 
 # ------------------------------------------------------------------ #
-# Placeholder routes — students will implement these                  #
+# General routes                                                      #
 # ------------------------------------------------------------------ #
 
 @app.route("/terms")
@@ -215,19 +225,169 @@ def profile():
     return render_template("profile.html", user=user, summary=summary)
 
 
-@app.route("/expenses/add")
+# ------------------------------------------------------------------ #
+# Expense CRUD routes                                                  #
+# ------------------------------------------------------------------ #
+
+def login_required():
+    """Check if user is logged in; redirect to /login if not."""
+    if not session.get("user_id"):
+        flash("Please sign in to access this page.", "error")
+        return redirect(url_for("login"))
+    return None
+
+
+@app.route("/expenses")
+def list_expenses():
+    """List all expenses for the logged-in user, newest first."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    expenses = db_get_expenses_by_user(session["user_id"])
+    return render_template("expenses/list.html", expenses=expenses)
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    """Handle GET (show add form) and POST (create expense)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method == "POST":
+        amount = request.form.get("amount", "").strip()
+        category = request.form.get("category", "").strip()
+        description = request.form.get("description", "").strip()
+        date = request.form.get("date", "").strip()
+
+        # Validation
+        errors = []
+        try:
+            amount_float = float(amount)
+            if amount_float <= 0:
+                errors.append("Amount must be a positive number.")
+        except (ValueError, TypeError):
+            errors.append("Amount is required and must be a valid number.")
+
+        if category not in CATEGORIES:
+            errors.append("Please select a valid category.")
+
+        if not date:
+            errors.append("Date is required.")
+
+        if len(description) > 200:
+            errors.append("Description must be 200 characters or less.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return render_template(
+                "expenses/form.html",
+                mode="add",
+                categories=CATEGORIES,
+                expense={"amount": amount, "category": category, "description": description, "date": date},
+                today=date_helper.today().isoformat(),
+            )
+
+        db_create_expense(session["user_id"], amount_float, category, date, description)
+        flash("Expense added successfully!", "success")
+        return redirect(url_for("list_expenses"))
+
+    return render_template(
+        "expenses/form.html",
+        mode="add",
+        categories=CATEGORIES,
+        expense=None,
+        today=date_helper.today().isoformat(),
+    )
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    """Handle GET (show edit form) and POST (update expense)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    expense = db_get_expense_by_id(id)
+    if expense is None:
+        abort(404)
+    if expense["user_id"] != session["user_id"]:
+        abort(403)
+
+    if request.method == "POST":
+        amount = request.form.get("amount", "").strip()
+        category = request.form.get("category", "").strip()
+        description = request.form.get("description", "").strip()
+        date = request.form.get("date", "").strip()
+
+        # Validation
+        errors = []
+        try:
+            amount_float = float(amount)
+            if amount_float <= 0:
+                errors.append("Amount must be a positive number.")
+        except (ValueError, TypeError):
+            errors.append("Amount is required and must be a valid number.")
+
+        if category not in CATEGORIES:
+            errors.append("Please select a valid category.")
+
+        if not date:
+            errors.append("Date is required.")
+
+        if len(description) > 200:
+            errors.append("Description must be 200 characters or less.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return render_template(
+                "expenses/form.html",
+                mode="edit",
+                categories=CATEGORIES,
+                expense={"id": id, "amount": amount, "category": category, "description": description, "date": date},
+                today=date_helper.today().isoformat(),
+            )
+
+        updated = db_update_expense(id, session["user_id"], amount_float, category, date, description)
+        if not updated:
+            abort(403)
+
+        flash("Expense updated successfully!", "success")
+        return redirect(url_for("list_expenses"))
+
+    return render_template(
+        "expenses/form.html",
+        mode="edit",
+        categories=CATEGORIES,
+        expense=expense,
+        today=date_helper.today().isoformat(),
+    )
 
 
-@app.route("/expenses/<int:id>/delete")
-def delete_expense(id):
-    return "Delete expense — coming in Step 9"
+@app.route("/expenses/<int:id>/delete", methods=["GET", "POST"])
+def delete_expense_view(id):
+    """Handle GET (show delete confirmation) and POST (execute delete)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    expense = db_get_expense_by_id(id)
+    if expense is None:
+        abort(404)
+    if expense["user_id"] != session["user_id"]:
+        abort(403)
+
+    if request.method == "POST":
+        deleted = db_delete_expense(id, session["user_id"])
+        if not deleted:
+            abort(403)
+        flash("Expense deleted successfully!", "success")
+        return redirect(url_for("list_expenses"))
+
+    return render_template("expenses/delete.html", expense=expense)
 
 
 if __name__ == "__main__":

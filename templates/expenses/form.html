@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}{% if mode == "add" %}Add Expense{% else %}Edit Expense{% endif %} — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/expenses.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="expense-form-section">
+    <div class="expense-form-container">
+
+        <div class="expense-form-card">
+            <h1 class="expense-form-title">
+                {% if mode == "add" %}Add Expense{% else %}Edit Expense{% endif %}
+            </h1>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                <div class="auth-{{ category }}">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{% if mode == 'add' %}{{ url_for('add_expense') }}{% else %}{{ url_for('edit_expense', id=expense.id) }}{% endif %}">
+                <div class="form-group">
+                    <label for="amount">Amount (₹)</label>
+                    <input type="number" id="amount" name="amount"
+                           class="form-input" placeholder="e.g. 450.00"
+                           step="0.01" min="0.01" required autofocus
+                           value="{{ expense.amount if expense else '' }}">
+                </div>
+
+                <div class="form-group">
+                    <label for="category">Category</label>
+                    <select id="category" name="category" class="form-select" required>
+                        <option value="">Select a category</option>
+                        {% for cat in categories %}
+                        <option value="{{ cat }}" {% if expense and expense.category == cat %}selected{% endif %}>{{ cat }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <textarea id="description" name="description"
+                              class="form-textarea" placeholder="What was this expense for?"
+                              maxlength="200">{{ expense.description if expense else '' }}</textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="date">Date</label>
+                    <input type="date" id="date" name="date"
+                           class="form-input" required
+                           value="{{ expense.date if expense else today }}">
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-submit">
+                        {% if mode == "add" %}Add Expense{% else %}Update Expense{% endif %}
+                    </button>
+                    <a href="{{ url_for('list_expenses') }}" class="btn-cancel">Cancel</a>
+                </div>
+            </form>
+        </div>
+</section>
+
+{% endblock %}
