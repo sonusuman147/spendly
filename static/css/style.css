@@ -582,27 +582,67 @@ a { color: inherit; text-decoration: none; }
 .footer {
     background: var(--ink);
     color: var(--paper);
-    padding: 2.5rem 2rem;
+    padding: 3rem 2rem 2.5rem;
     text-align: center;
 }
 
 .footer-inner {
+    max-width: var(--max-width);
+    margin: 0 auto;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 0.4rem;
+    gap: 1.25rem;
 }
 
-.footer .brand-icon { color: var(--accent-2); font-size: 1.5rem; }
+.footer-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.footer .brand-icon {
+    color: var(--accent-2);
+    font-size: 1.5rem;
+}
 
 .footer-name {
     font-weight: 600;
-    font-size: 1rem;
+    font-size: 1.1rem;
+    color: var(--paper);
+}
+
+.footer-tagline {
+    font-size: 0.85rem;
+    color: var(--ink-faint);
+    margin-top: -0.25rem;
+}
+
+.footer-legal {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+}
+
+.footer-legal a {
+    color: var(--ink-faint);
+    transition: color 0.2s;
+}
+
+.footer-legal a:hover {
+    color: var(--accent-2);
+}
+
+.footer-legal-sep {
+    color: var(--ink-muted);
+    font-size: 0.7rem;
 }
 
 .footer-copy {
-    font-size: 0.8rem;
-    color: var(--ink-faint);
+    font-size: 0.75rem;
+    color: var(--ink-muted);
+    margin-top: 0.25rem;
 }
 
 /* ------------------------------------------------------------------ */
