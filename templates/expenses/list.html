@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Expenses — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/expenses.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="expenses-section">
+    <div class="expenses-header">
+        <h1 class="expenses-title">Your Expenses</h1>
+        <a href="{{ url_for('add_expense') }}" class="btn-add">
+            <i data-lucide="plus" width="18" height="18"></i>
+            Add Expense
+        </a>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% if expenses %}
+    <div class="expenses-table-wrapper">
+        <table class="expenses-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th class="amount-col">Amount</th>
+                    <th class="actions-col">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for exp in expenses %}
+                <tr>
+                    <td>{{ exp.date }}</td>
+                    <td>{{ exp.description or "—" }}</td>
+                    <td><span class="category-tag cat-{{ exp.category.lower() }}">{{ exp.category }}</span></td>
+                    <td class="amount-col">₹{{ "%.2f"|format(exp.amount) }}</td>
+                    <td class="actions-col">
+                        <a href="{{ url_for('edit_expense', id=exp.id) }}" class="btn-action">
+                            <i data-lucide="pencil" width="14" height="14"></i>
+                            Edit
+                        </a>
+                        <a href="{{ url_for('delete_expense_view', id=exp.id) }}" class="btn-action btn-action-danger">
+                            <i data-lucide="trash-2" width="14" height="14"></i>
+                            Delete
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="expenses-empty">
+        <div class="expenses-empty-icon">
+            <i data-lucide="receipt" width="48" height="48"></i>
+        </div>
+        <h2 class="expenses-empty-title">No expenses yet</h2>
+        <p class="expenses-empty-text">Start tracking your spending by adding your first expense.</p>
+        <a href="{{ url_for('add_expense') }}" class="btn-primary">Add your first expense</a>
+    </div>
+    {% endif %}
+</section>
+
+{% endblock %}

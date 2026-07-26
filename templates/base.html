@@ -18,8 +18,9 @@
                 <span class="brand-icon">◈</span>
                 <span class="brand-name">Spendly</span>
             </a>
-            <div class="nav-links">
+<div class="nav-links">
                 {% if session.user_id %}
+                <a href="{{ url_for('list_expenses') }}">Expenses</a>
                 <a href="{{ url_for('profile') }}">{{ session.user_name }}</a>
                 <a href="{{ url_for('logout') }}">Sign out</a>
                 {% else %}
