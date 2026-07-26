@@ -36,13 +36,17 @@
 
     <footer class="footer">
         <div class="footer-inner">
-            <span class="brand-icon">◈</span>
-            <span class="footer-name">Spendly</span>
-            <p class="footer-copy">Track every rupee. Own your finances.</p>
-            <div class="footer-links">
-                <a href="{{ url_for('terms') }}">Terms and Conditions</a>
-                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+            <div class="footer-brand">
+                <span class="brand-icon">◈</span>
+                <span class="footer-name">Spendly</span>
             </div>
+            <p class="footer-tagline">Track every rupee. Own your finances.</p>
+            <div class="footer-legal">
+                <a href="{{ url_for('privacy') }}">Privacy Policy</a>
+                <span class="footer-legal-sep">&amp;</span>
+                <a href="{{ url_for('terms') }}">Terms &amp; Conditions</a>
+            </div>
+            <p class="footer-copy">&copy; 2026 Spendly. All rights reserved.</p>
         </div>
     </footer>
 
