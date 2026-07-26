@@ -184,8 +184,9 @@ def link_google_account(user_id, google_id):
 def get_user_by_id(user_id):
     """Look up a user by primary key.
 
-    Returns a dictionary of user fields (id, name, email, created_at)
-    if found, or None if no match.
+    Returns a dictionary of user fields (id, name, email, created_at,
+    member_since) if found, or None if no match.
+    member_since is formatted as 'Month YYYY' (e.g. 'January 2026').
     Uses a parameterized query — safe from SQL injection.
     """
     conn = get_db()
@@ -196,7 +197,31 @@ def get_user_by_id(user_id):
     )
     user = cursor.fetchone()
     conn.close()
-    return dict(user) if user else None
+    if user:
+        user = dict(user)
+        # Parse the ISO-format date and format as "Month YYYY"
+        from datetime import datetime
+        try:
+            dt = datetime.strptime(user["created_at"], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            dt = datetime.strptime(user["created_at"][:10], "%Y-%m-%d")
+        user["member_since"] = dt.strftime("%B %Y")
+        return user
+    return None
+
+
+def clear_expenses():
+    """Delete all records from the expenses table.
+
+    Users table is left untouched — only expense records are removed.
+    Uses the existing get_db() helper to obtain a database connection.
+    Safe to call multiple times.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM expenses;")
+    conn.commit()
+    conn.close()
 
 
 def get_user_expenses_summary(user_id):
