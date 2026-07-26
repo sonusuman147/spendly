@@ -57,6 +57,12 @@ def init_db():
         )
     """)
 
+    # Add google_id column if not already present — safe on repeated runs
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -76,13 +82,8 @@ def seed_db():
         conn.close()
         return
 
-    # Insert demo user
-    password_hash = generate_password_hash("demo123")
-    cursor.execute(
-        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-        ("Demo User", "demo@spendly.com", password_hash),
-    )
-    user_id = cursor.lastrowid
+    # Insert demo user using create_user helper
+    user_id = create_user("Demo User", "demo@spendly.com", password_hash=generate_password_hash("demo123"))
 
     today = date.today()
 
@@ -110,21 +111,22 @@ def seed_db():
     conn.close()
 
 
-def create_user(name, email, password):
-    """Create a new user with a hashed password.
+def create_user(name, email, password_hash=None, google_id=None):
+    """Create a new user with an optional password hash and Google ID.
 
-    Hashes the password using werkzeug.security.generate_password_hash,
-    inserts a new row into the users table, and returns the new user's id.
+    If password_hash is None (Google-only user), stores an empty string.
+    Inserts a new row into the users table and returns the new user's id.
 
     Raises sqlite3.IntegrityError if the email is already taken (UNIQUE constraint).
     Uses parameterized queries — safe from SQL injection.
     """
-    password_hash = generate_password_hash(password)
+    if password_hash is None:
+        password_hash = ""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-        (name, email, password_hash),
+        "INSERT INTO users (name, email, password_hash, google_id) VALUES (?, ?, ?, ?)",
+        (name, email, password_hash, google_id),
     )
     user_id = cursor.lastrowid
     conn.commit()
@@ -144,6 +146,39 @@ def get_user_by_email(email):
     user = cursor.fetchone()
     conn.close()
     return dict(user) if user else None
+
+
+def get_user_by_google_id(google_id):
+    """Look up a user by Google ID.
+
+    Returns a dictionary of user fields if found, or None if no match.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE google_id = ?", (google_id,))
+    user = cursor.fetchone()
+    conn.close()
+    return dict(user) if user else None
+
+
+def link_google_account(user_id, google_id):
+    """Link a Google account to an existing user.
+
+    Sets the google_id column for the given user. Raises ValueError
+    if the google_id is already linked to a different account.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    # Application-level uniqueness check
+    existing = get_user_by_google_id(google_id)
+    if existing and existing["id"] != user_id:
+        raise ValueError("This Google account is already linked to another user.")
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET google_id = ? WHERE id = ?", (google_id, user_id))
+    conn.commit()
+    conn.close()
 
 
 def get_user_by_id(user_id):

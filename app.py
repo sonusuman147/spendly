@@ -1,11 +1,26 @@
+import os
 import sqlite3
 
+from dotenv import load_dotenv
 from flask import Flask, render_template, request, session, flash, redirect, url_for, abort
-from werkzeug.security import check_password_hash
-from database.db import get_db, init_db, seed_db, get_user_by_email, create_user, get_user_by_id, get_user_expenses_summary
+from werkzeug.security import check_password_hash, generate_password_hash
+from authlib.integrations.flask_client import OAuth
+from database.db import get_db, init_db, seed_db, get_user_by_email, create_user, get_user_by_id, get_user_expenses_summary, get_user_by_google_id, link_google_account
+
+load_dotenv()
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "spendly-dev-secret-key"
+
+oauth = OAuth(app)
+
+oauth.register(
+    name="google",
+    client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
+    client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
+    server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
+    client_kwargs={"scope": "openid email profile"},
+)
 
 # Initialize database on startup
 with app.app_context():
@@ -49,7 +64,7 @@ def register():
             return render_template("register.html")
 
         try:
-            create_user(name, email, password)
+            create_user(name, email, password_hash=generate_password_hash(password))
         except sqlite3.IntegrityError:
             flash("Email already registered.", "error")
             return render_template("register.html")
@@ -89,6 +104,74 @@ def login():
         return redirect(url_for("profile"))
 
     return render_template("login.html")
+
+
+@app.route("/login/google")
+def google_login():
+    """Redirect to Google's OAuth consent screen."""
+    redirect_uri = url_for("google_callback", _external=True)
+    return oauth.google.authorize_redirect(redirect_uri)
+
+
+@app.route("/login/google/callback")
+def google_callback():
+    """Handle the OAuth callback from Google.
+
+    Creates a new user or links google_id to an existing account,
+    then starts a session identical to email/password login.
+    """
+    try:
+        token = oauth.google.authorize_access_token()
+    except Exception:
+        flash("Google sign-in failed. Please try again.", "error")
+        return redirect(url_for("login"))
+
+    # Fetch user info from Google's userinfo endpoint
+    userinfo = oauth.google.userinfo()
+
+    # Verify email is verified — security requirement
+    if not userinfo.get("email_verified"):
+        flash("Please use a Google account with a verified email address.", "error")
+        return redirect(url_for("login"))
+
+    google_id = userinfo["sub"]
+    email = userinfo["email"]
+    name = userinfo.get("name", email.split("@")[0])
+
+    # Check if google_id already exists
+    user = get_user_by_google_id(google_id)
+    if user:
+        # Existing Google user — login
+        session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
+        flash("Welcome back!", "success")
+        return redirect(url_for("landing"))
+
+    # No existing google_id — check by email
+    user = get_user_by_email(email)
+    if user:
+        # Existing email/password user — link google_id
+        try:
+            link_google_account(user["id"], google_id)
+        except ValueError:
+            flash("This Google account is already linked to another user.", "error")
+            return redirect(url_for("login"))
+        session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
+        flash("Google account linked! Welcome back.", "success")
+        return redirect(url_for("landing"))
+
+    # New user — create account via existing helper
+    try:
+        user_id = create_user(name, email, google_id=google_id)
+    except sqlite3.IntegrityError:
+        flash("An account with this email already exists. Please sign in.", "error")
+        return redirect(url_for("login"))
+
+    session["user_id"] = user_id
+    session["user_name"] = name
+    flash("Account created! Welcome to Spendly.", "success")
+    return redirect(url_for("landing"))
 
 
 # ------------------------------------------------------------------ #

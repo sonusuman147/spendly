@@ -464,6 +464,63 @@ a { color: inherit; text-decoration: none; }
 
 .btn-submit:hover { background: var(--accent); }
 
+/* ------------------------------------------------------------------ */
+/* Google Sign-in Button                                               */
+/* ------------------------------------------------------------------ */
+
+.btn-google {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.625rem;
+    padding: 0.65rem 1rem;
+    background: var(--paper-card);
+    color: var(--ink-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    margin-bottom: 0;
+}
+
+.btn-google:hover {
+    background: var(--paper-warm);
+    border-color: var(--ink-faint);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.google-icon {
+    flex-shrink: 0;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    margin: 1.25rem 0;
+    color: var(--ink-faint);
+    font-size: 0.8rem;
+    gap: 0.75rem;
+}
+
+.divider::before,
+.divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--border-soft);
+}
+
+.divider span {
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
 .auth-switch {
     text-align: center;
     font-size: 0.875rem;
