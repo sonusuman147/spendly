@@ -4,11 +4,13 @@
 
 .profile-section {
     padding: 2.5rem 2rem 4rem;
+    width: 100%;
 }
 
 .profile-container {
-    max-width: 1000px;
+    max-width: var(--max-width, 1200px);
     margin: 0 auto;
+    width: 100%;
 }
 
 /* ------------------------------------------------------------------ */
@@ -156,6 +158,7 @@
     border-radius: var(--radius-md);
     box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
     overflow: hidden;
+    width: 100%;
 }
 
 .dashboard-card-header {
@@ -183,13 +186,166 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Profile Header Action (Edit Button)                                 */
+/* ------------------------------------------------------------------ */
+
+.profile-header-action {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.btn-edit-profile {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    background: var(--ink);
+    color: var(--paper);
+    padding: 0.5rem 1rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: background 0.2s;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-edit-profile:hover {
+    background: var(--accent);
+    color: var(--paper);
+}
+
+.btn-icon {
+    width: 16px;
+    height: 16px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Edit Profile Page                                                   */
+/* ------------------------------------------------------------------ */
+
+.profile-edit-page .profile-container {
+    max-width: 600px;
+}
+
+.edit-page-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.edit-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    text-decoration: none;
+    transition: color 0.2s;
+    flex-shrink: 0;
+}
+
+.edit-back-link:hover {
+    color: var(--ink);
+}
+
+.edit-page-title {
+    font-family: var(--font-display);
+    font-size: 1.5rem;
+    color: var(--ink);
+    margin: 0;
+}
+
+.edit-form-card {
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+    overflow: hidden;
+    padding: 2rem;
+}
+
+.edit-form-section {
+    margin-bottom: 2rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.edit-form-section:last-of-type {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.edit-form-section-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ink);
+    margin-bottom: 0.35rem;
+}
+
+.edit-form-section-desc {
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+    margin-bottom: 1.25rem;
+}
+
+.edit-form-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    justify-content: flex-end;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border-soft);
+}
+
+.edit-form-actions .btn-submit {
+    width: auto;
+    padding: 0.6rem 1.5rem;
+    margin-top: 0;
+}
+
+.edit-form-actions .btn-cancel {
+    display: inline-block;
+    background: transparent;
+    color: var(--ink-muted);
+    padding: 0.6rem 1.25rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: 1px solid var(--border);
+    transition: all 0.2s;
+    text-decoration: none;
+    text-align: center;
+}
+
+.edit-form-actions .btn-cancel:hover {
+    border-color: var(--ink);
+    color: var(--ink);
+}
+
+/* ------------------------------------------------------------------ */
 /* Recent Expenses Table                                               */
 /* ------------------------------------------------------------------ */
+
+.profile-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
 
 .profile-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 0.85rem;
+    min-width: 400px;
 }
 
 .profile-table thead th {
@@ -201,6 +357,7 @@
     letter-spacing: 0.06em;
     padding: 0.5rem 0.5rem 0.5rem 0;
     border-bottom: 1px solid var(--border);
+    white-space: nowrap;
 }
 
 .profile-table tbody td {
@@ -314,12 +471,53 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Edit Profile & Change Password Cards                                */
+/* ------------------------------------------------------------------ */
+
+.profile-edit-form .form-group {
+    margin-bottom: 1rem;
+}
+
+.profile-edit-form .form-group:last-of-type {
+    margin-bottom: 1.25rem;
+}
+
+.profile-edit-form .btn-submit {
+    width: auto;
+    padding: 0.6rem 1.5rem;
+    margin-top: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/* Security Question Text (Reset Password Page)                        */
+/* ------------------------------------------------------------------ */
+
+.security-question-text {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ink);
+    text-align: center;
+    padding: 1rem 0 1.5rem;
+    line-height: 1.5;
+}
+
+/* ------------------------------------------------------------------ */
 /* Responsive                                                          */
 /* ------------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+    .profile-stats {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
 
 @media (max-width: 800px) {
     .profile-dashboard {
         grid-template-columns: 1fr;
+    }
+
+    .profile-stats {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
@@ -342,4 +540,3 @@
         padding-left: 0;
     }
 }
-

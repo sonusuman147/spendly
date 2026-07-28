@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Profile — Spendly{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="profile-section profile-edit-page">
+    <div class="profile-container">
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+            <div class="auth-{{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="edit-page-header">
+            <a href="{{ url_for('profile') }}" class="edit-back-link">
+                <i data-lucide="arrow-left" class="btn-icon"></i>
+                Back to Profile
+            </a>
+            <h1 class="edit-page-title">Edit Profile</h1>
+        </div>
+
+        <div class="edit-form-card">
+            <form method="POST" action="{{ url_for('profile_edit') }}" class="profile-edit-form">
+                <!-- Profile Fields -->
+                <div class="edit-form-section">
+                    <h2 class="edit-form-section-title">Profile Information</h2>
+
+                    <div class="form-group">
+                        <label for="edit_name">Full name</label>
+                        <input type="text" id="edit_name" name="name"
+                               class="form-input" value="{{ user.name }}" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="edit_email">Email address</label>
+                        <input type="email" id="edit_email" name="email"
+                               class="form-input" value="{{ user.email }}" required>
+                    </div>
+                </div>
+
+                <!-- Password Fields -->
+                <div class="edit-form-section">
+                    <h2 class="edit-form-section-title">Change Password</h2>
+                    <p class="edit-form-section-desc">Leave blank to keep your current password.</p>
+
+                    <div class="form-group">
+                        <label for="current_password">Current password</label>
+                        <input type="password" id="current_password" name="current_password"
+                               class="form-input" placeholder="Enter current password">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="new_password">New password</label>
+                        <input type="password" id="new_password" name="new_password"
+                               class="form-input" placeholder="Min. 8 characters">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirm_new_password">Confirm new password</label>
+                        <input type="password" id="confirm_new_password" name="confirm_new_password"
+                               class="form-input" placeholder="Re-enter new password">
+                    </div>
+                </div>
+
+                <!-- Actions -->
+                <div class="edit-form-actions">
+                    <a href="{{ url_for('profile') }}" class="btn-cancel">Cancel</a>
+                    <button type="submit" class="btn-submit">Save Changes</button>
+                </div>
+            </form>
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>lucide.createIcons();</script>
+{% endblock %}
+

@@ -14,6 +14,14 @@ CATEGORIES = [
     "Other",
 ]
 
+SECURITY_QUESTIONS = [
+    "What is your father's middle name?",
+    "What is your best friend's name?",
+    "What village were you born in?",
+    "What is your pet's name?",
+    "What was the name of your first school?",
+]
+
 
 def get_db():
     """Open and return a connection to the SQLite database.
@@ -63,6 +71,17 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Add security_question and security_answer_hash columns — safe on repeated runs
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN security_question TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN security_answer_hash TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
 
@@ -82,8 +101,14 @@ def seed_db():
         conn.close()
         return
 
-    # Insert demo user using create_user helper
-    user_id = create_user("Demo User", "demo@spendly.com", password_hash=generate_password_hash("demo123"))
+    # Insert demo user using create_user helper with a security question
+    user_id = create_user(
+        "Demo User",
+        "demo@spendly.com",
+        password_hash=generate_password_hash("demo123"),
+        security_question="What is your pet's name?",
+        security_answer_hash=generate_password_hash("fido"),
+    )
 
     today = date.today()
 
@@ -111,8 +136,8 @@ def seed_db():
     conn.close()
 
 
-def create_user(name, email, password_hash=None, google_id=None):
-    """Create a new user with an optional password hash and Google ID.
+def create_user(name, email, password_hash=None, google_id=None, security_question=None, security_answer_hash=None):
+    """Create a new user with optional password hash, Google ID, and security question.
 
     If password_hash is None (Google-only user), stores an empty string.
     Inserts a new row into the users table and returns the new user's id.
@@ -125,8 +150,9 @@ def create_user(name, email, password_hash=None, google_id=None):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO users (name, email, password_hash, google_id) VALUES (?, ?, ?, ?)",
-        (name, email, password_hash, google_id),
+        "INSERT INTO users (name, email, password_hash, google_id, security_question, security_answer_hash) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (name, email, password_hash, google_id, security_question, security_answer_hash),
     )
     user_id = cursor.lastrowid
     conn.commit()
@@ -208,6 +234,60 @@ def get_user_by_id(user_id):
         user["member_since"] = dt.strftime("%B %Y")
         return user
     return None
+
+
+def update_user_profile(user_id, name, email):
+    """Update a user's name and email.
+
+    Returns True if the update was successful.
+    Raises sqlite3.IntegrityError if the email is already taken.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET name = ?, email = ? WHERE id = ?",
+        (name, email, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def update_password(user_id, new_password_hash):
+    """Update a user's password hash.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (new_password_hash, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def get_user_by_email_with_security(email):
+    """Look up a user by email and return only security-related fields.
+
+    Returns dict with {id, security_question, security_answer_hash} if found,
+    or None if no match. Used by the forgot-password flow.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, security_question, security_answer_hash FROM users WHERE email = ?",
+        (email,),
+    )
+    user = cursor.fetchone()
+    conn.close()
+    return dict(user) if user else None
 
 
 def clear_expenses():

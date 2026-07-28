@@ -29,6 +29,12 @@
                 <div class="profile-email">{{ user.email }}</div>
                 <div class="profile-member-since">Member since {{ user.member_since }}</div>
             </div>
+            <div class="profile-header-action">
+                <a href="{{ url_for('profile_edit') }}" class="btn-edit-profile">
+                    <i data-lucide="edit" class="btn-icon"></i>
+                    Edit Profile
+                </a>
+            </div>
         </div>
 
         <!-- Summary Cards Row -->
@@ -130,4 +136,3 @@
 {% block scripts %}
 <script>lucide.createIcons();</script>
 {% endblock %}
-

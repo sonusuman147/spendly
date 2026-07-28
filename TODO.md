@@ -1,22 +1,27 @@
-# Google Authentication - Implementation Progress
+# TODO: Refactor Profile Page UX — COMPLETED ✅
 
-## Implementation Order
+## 1. Update `templates/profile.html` — Clean read-only overview
+- [x] Remove Edit Profile section card
+- [x] Remove Change Password section card
+- [x] Add "Edit Profile" button to top-right of profile-header
+- [x] Add `.profile-header-action` container in the header
 
-- [x] Step 1: `requirements.txt` — Add `authlib>=1.3.0`
-- [x] Step 2: `database/db.py` — Refactor `create_user()` signature
-- [x] Step 3: `database/db.py` — Update `seed_db()` to use new `create_user()` signature
-- [x] Step 4: `database/db.py` — Add `google_id` column migration in `init_db()`
-- [x] Step 5: `database/db.py` — Add `get_user_by_google_id()` helper
-- [x] Step 6: `database/db.py` — Add `link_google_account()` helper
-- [x] Step 7: `app.py` — Add `import os` and `from authlib.integrations.flask_client import OAuth`
-- [x] Step 8: `app.py` — Update db helper imports
-- [x] Step 9: `app.py` — Add `generate_password_hash` to werkzeug imports
-- [x] Step 10: `app.py` — Configure OAuth with Google provider
-- [x] Step 11: `app.py` — Update `register()` route to use `password_hash=generate_password_hash(password)`
-- [x] Step 12: `app.py` — Add `GET /login/google` route
-- [x] Step 13: `app.py` — Add `GET /login/google/callback` route
-- [x] Step 14: `templates/login.html` — Add Google sign-in button and divider
-- [x] Step 15: `static/css/style.css` — Add `.btn-google` and `.divider` styles
-- [x] Step 16: Terminal — Run `pip install authlib`
-- [x] Step 17: Terminal — Run `python app.py` to verify
+## 2. Create `templates/profile_edit.html` — Dedicated edit page
+- [x] New template with form card
+- [x] Fields: Full Name, Email, Current Password, New Password, Confirm New Password
+- [x] Save Changes and Cancel buttons
+- [x] Loads profile.css for consistent styling
 
+## 3. Update `app.py` — Add `/profile/edit` route
+- [x] New GET/POST route for `/profile/edit`
+- [x] POST validates and updates profile + optionally password
+- [x] Redirect back to `/profile` on success
+
+## 4. Update `static/css/profile.css` — Button + edit page styles
+- [x] `.profile-header-action` for Edit button positioning
+- [x] `.btn-edit-profile` button styles
+- [x] `.profile-edit-page` section styles
+- [x] Edit form card, sections, and action button styles
+
+## 5. Verification
+- [x] App loads without errors
