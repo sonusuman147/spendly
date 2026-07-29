@@ -18,11 +18,19 @@
                 <span class="brand-icon">◈</span>
                 <span class="brand-name">Spendly</span>
             </a>
-<div class="nav-links">
+            <div class="nav-links">
                 {% if session.user_id %}
                 <a href="{{ url_for('list_expenses') }}">Expenses</a>
-                <a href="{{ url_for('profile') }}">{{ session.user_name }}</a>
-                <a href="{{ url_for('logout') }}">Sign out</a>
+                <a href="{{ url_for('profile') }}">Dashboard</a>
+                <div class="nav-user-chip">
+                    <div class="nav-user-avatar">{{ session.user_name[:1].upper() }}{% if ' ' in session.user_name %}{{ session.user_name.split()[-1][:1].upper() }}{% endif %}</div>
+                    <span class="nav-user-name">{{ session.user_name.split()[0] }}</span>
+                    <i data-lucide="chevron-down" class="nav-chevron"></i>
+                </div>
+                <a href="{{ url_for('logout') }}" class="nav-signout">
+                    <i data-lucide="log-out" class="btn-icon"></i>
+                    Sign out
+                </a>
                 {% else %}
                 <a href="{{ url_for('login') }}">Sign in</a>
                 <a href="{{ url_for('register') }}" class="nav-cta">Get started</a>
