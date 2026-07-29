@@ -114,6 +114,69 @@ a { color: inherit; text-decoration: none; }
 .nav-cta:hover { background: var(--accent) !important; }
 
 /* ------------------------------------------------------------------ */
+/* Navbar User Chip & Sign-out Button                                  */
+/* ------------------------------------------------------------------ */
+
+.nav-user-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    cursor: default;
+}
+
+.nav-user-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: #1B4332;
+    color: #ffffff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    font-weight: 600;
+    font-family: var(--font-body);
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.nav-user-name {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+}
+
+.nav-chevron {
+    width: 14px;
+    height: 14px;
+    color: var(--ink-muted);
+}
+
+.nav-signout {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    padding: 0.4rem 0.9rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    transition: all 0.2s;
+    text-decoration: none;
+}
+
+.nav-signout:hover {
+    border-color: var(--ink-muted);
+    color: var(--ink);
+}
+
+.nav-signout .btn-icon {
+    width: 15px;
+    height: 15px;
+}
+
+/* ------------------------------------------------------------------ */
 /* Main                                                                */
 /* ------------------------------------------------------------------ */
 

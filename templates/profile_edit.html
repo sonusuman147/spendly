@@ -8,75 +8,163 @@
 
 {% block content %}
 
-<section class="profile-section profile-edit-page">
-    <div class="profile-container">
+<section class="edit-page">
+    <div class="edit-page-inner">
 
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% if messages %}
             {% for category, message in messages %}
-            <div class="auth-{{ category }}">{{ message }}</div>
+            <div class="edit-flash auth-{{ category }}">{{ message }}</div>
             {% endfor %}
           {% endif %}
         {% endwith %}
 
+        <!-- Page Header -->
         <div class="edit-page-header">
             <a href="{{ url_for('profile') }}" class="edit-back-link">
-                <i data-lucide="arrow-left" class="btn-icon"></i>
+                <i data-lucide="arrow-left" class="edit-icon-sm"></i>
                 Back to Profile
             </a>
             <h1 class="edit-page-title">Edit Profile</h1>
+            <p class="edit-page-subtitle">Manage your account information and security.</p>
         </div>
 
-        <div class="edit-form-card">
-            <form method="POST" action="{{ url_for('profile_edit') }}" class="profile-edit-form">
-                <!-- Profile Fields -->
-                <div class="edit-form-section">
-                    <h2 class="edit-form-section-title">Profile Information</h2>
+        <form method="POST" action="{{ url_for('profile_edit') }}" class="edit-form">
 
-                    <div class="form-group">
-                        <label for="edit_name">Full name</label>
-                        <input type="text" id="edit_name" name="name"
-                               class="form-input" value="{{ user.name }}" required>
+            <!-- Card 1 — Profile Information -->
+            <div class="edit-card">
+                <div class="edit-card-grid">
+                    <!-- Left: Avatar Column -->
+                    <div class="edit-avatar-col">
+                        <div class="edit-avatar-wrap">
+                            <div class="edit-avatar">{{ user.name[:1].upper() }}{% if ' ' in user.name %}{{ user.name.split()[-1][:1].upper() }}{% endif %}</div>
+                            <button type="button" class="edit-avatar-btn" aria-label="Change avatar">
+                                <i data-lucide="camera" class="edit-icon-sm"></i>
+                            </button>
+                        </div>
+                        <div class="edit-avatar-name">{{ user.name }}</div>
+                        <div class="edit-avatar-member">📅 Member since {{ user.member_since }}</div>
                     </div>
 
-                    <div class="form-group">
-                        <label for="edit_email">Email address</label>
-                        <input type="email" id="edit_email" name="email"
-                               class="form-input" value="{{ user.email }}" required>
+                    <!-- Right: Fields Column -->
+                    <div class="edit-fields-col">
+                        <div class="edit-section-head">
+                            <i data-lucide="user" class="edit-section-icon"></i>
+                            <div>
+                                <h2 class="edit-section-title">Profile Information</h2>
+                                <p class="edit-section-sub">Update your personal details</p>
+                            </div>
+                        </div>
+
+                        <div class="edit-field-row">
+                            <div class="edit-field-group">
+                                <label for="edit_name" class="edit-label">Full name</label>
+                                <div class="edit-input-wrap">
+                                    <i data-lucide="person" class="edit-input-icon"></i>
+                                    <input type="text" id="edit_name" name="name"
+                                           class="edit-input" value="{{ user.name }}" required>
+                                </div>
+                            </div>
+                            <div class="edit-field-group">
+                                <label for="edit_email" class="edit-label">Email address</label>
+                                <div class="edit-input-wrap">
+                                    <i data-lucide="mail" class="edit-input-icon"></i>
+                                    <input type="email" id="edit_email" name="email"
+                                           class="edit-input" value="{{ user.email }}" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="edit-note">
+                            <i data-lucide="shield-check" class="edit-note-icon"></i>
+                            <span>Your email address is used to log in to your account.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2 — Change Password -->
+            <div class="edit-card">
+                <div class="edit-section-head">
+                    <i data-lucide="lock" class="edit-section-icon"></i>
+                    <div>
+                        <h2 class="edit-section-title">Change Password</h2>
+                        <p class="edit-section-sub">Keep your account secure by using a strong password.</p>
                     </div>
                 </div>
 
-                <!-- Password Fields -->
-                <div class="edit-form-section">
-                    <h2 class="edit-form-section-title">Change Password</h2>
-                    <p class="edit-form-section-desc">Leave blank to keep your current password.</p>
-
-                    <div class="form-group">
-                        <label for="current_password">Current password</label>
-                        <input type="password" id="current_password" name="current_password"
-                               class="form-input" placeholder="Enter current password">
+                <div class="edit-password-list">
+                    <!-- Current Password -->
+                    <div class="edit-password-row">
+                        <div class="edit-pwd-left">
+                            <i data-lucide="lock" class="edit-pwd-icon"></i>
+                        </div>
+                        <div class="edit-pwd-body">
+                            <label for="current_password" class="edit-pwd-label">Current password</label>
+                            <input type="password" id="current_password" name="current_password"
+                                   class="edit-pwd-input" placeholder="Enter current password"
+                                   autocomplete="current-password">
+                        </div>
+                        <button type="button" class="edit-pwd-toggle" aria-label="Show/hide password">
+                            <i data-lucide="eye" class="edit-icon-sm"></i>
+                        </button>
                     </div>
 
-                    <div class="form-group">
-                        <label for="new_password">New password</label>
-                        <input type="password" id="new_password" name="new_password"
-                               class="form-input" placeholder="Min. 8 characters">
+                    <!-- New Password -->
+                    <div class="edit-password-row">
+                        <div class="edit-pwd-left">
+                            <i data-lucide="lock" class="edit-pwd-icon"></i>
+                        </div>
+                        <div class="edit-pwd-body">
+                            <label for="new_password" class="edit-pwd-label">New password</label>
+                            <input type="password" id="new_password" name="new_password"
+                                   class="edit-pwd-input" placeholder="Min. 8 characters"
+                                   autocomplete="new-password">
+                        </div>
+                        <button type="button" class="edit-pwd-toggle" aria-label="Show/hide password">
+                            <i data-lucide="eye" class="edit-icon-sm"></i>
+                        </button>
                     </div>
 
-                    <div class="form-group">
-                        <label for="confirm_new_password">Confirm new password</label>
-                        <input type="password" id="confirm_new_password" name="confirm_new_password"
-                               class="form-input" placeholder="Re-enter new password">
+                    <!-- Confirm New Password -->
+                    <div class="edit-password-row">
+                        <div class="edit-pwd-left">
+                            <i data-lucide="lock" class="edit-pwd-icon"></i>
+                        </div>
+                        <div class="edit-pwd-body">
+                            <label for="confirm_new_password" class="edit-pwd-label">Confirm new password</label>
+                            <input type="password" id="confirm_new_password" name="confirm_new_password"
+                                   class="edit-pwd-input" placeholder="Re-enter new password"
+                                   autocomplete="new-password">
+                        </div>
+                        <button type="button" class="edit-pwd-toggle" aria-label="Show/hide password">
+                            <i data-lucide="eye" class="edit-icon-sm"></i>
+                        </button>
                     </div>
                 </div>
 
-                <!-- Actions -->
-                <div class="edit-form-actions">
-                    <a href="{{ url_for('profile') }}" class="btn-cancel">Cancel</a>
-                    <button type="submit" class="btn-submit">Save Changes</button>
+                <!-- Password Tips Banner -->
+                <div class="edit-tips-banner">
+                    <i data-lucide="shield-check" class="edit-tips-icon"></i>
+                    <div class="edit-tips-text">
+                        <strong>Password tips:</strong> Use at least 8 characters with a mix of letters, numbers, and symbols for a stronger password.
+                    </div>
                 </div>
-            </form>
-        </div>
+            </div>
+
+            <!-- Footer Bar -->
+            <div class="edit-footer-bar">
+                <a href="{{ url_for('profile') }}" class="edit-btn-cancel">
+                    <i data-lucide="x" class="edit-icon-sm"></i>
+                    Cancel
+                </a>
+                <button type="submit" class="edit-btn-save">
+                    <i data-lucide="save" class="edit-icon-sm"></i>
+                    Save Changes
+                </button>
+            </div>
+
+        </form>
 
     </div>
 </section>
@@ -84,6 +172,33 @@
 {% endblock %}
 
 {% block scripts %}
-<script>lucide.createIcons();</script>
+<script>
+lucide.createIcons();
+
+// Password visibility toggle — find the input sibling within same row
+document.querySelectorAll('.edit-pwd-toggle').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var row = this.closest('.edit-password-row');
+        var input = row.querySelector('.edit-pwd-input');
+        var icon = this.querySelector('i');
+        if (!input) return;
+        var isPassword = input.getAttribute('type') === 'password';
+        input.setAttribute('type', isPassword ? 'text' : 'password');
+        icon.setAttribute('data-lucide', isPassword ? 'eye-off' : 'eye');
+        this.setAttribute('aria-label', isPassword ? 'Hide password' : 'Show password');
+        lucide.createIcons();
+    });
+});
+
+// Clicking anywhere in the pill row focuses the input
+document.querySelectorAll('.edit-password-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+        if (e.target.closest('.edit-pwd-toggle')) return;
+        var input = this.querySelector('.edit-pwd-input');
+        if (input) input.focus();
+    });
+});
+</script>
 {% endblock %}
 
