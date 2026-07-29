@@ -1,4 +1,132 @@
 /* ------------------------------------------------------------------ */
+/* Date Filter Bar                                                     */
+/* ------------------------------------------------------------------ */
+
+.filter-bar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding: 0.75rem 1rem;
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.06);
+    flex-wrap: wrap;
+}
+
+.filter-quick-buttons {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.85rem;
+    border-radius: 999px;
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-muted);
+    background: transparent;
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.filter-btn-active {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+}
+
+.filter-btn-active:hover {
+    background: var(--accent);
+    color: var(--paper);
+    border-color: var(--accent);
+}
+
+.filter-separator {
+    width: 1px;
+    height: 28px;
+    background: var(--border);
+    flex-shrink: 0;
+}
+
+.filter-date-form {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+}
+
+.filter-date-inputs {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+}
+
+.filter-date-label {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--ink-muted);
+}
+
+.filter-date-text {
+    white-space: nowrap;
+}
+
+.filter-date-input {
+    padding: 0.35rem 0.6rem;
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    color: var(--ink);
+    background: var(--paper);
+    outline: none;
+    transition: border-color 0.2s;
+    max-width: 140px;
+}
+
+.filter-date-input:focus {
+    border-color: var(--accent);
+}
+
+.filter-apply-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 1rem;
+    border-radius: var(--radius-sm);
+    font-family: var(--font-body);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--paper);
+    background: var(--ink);
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+}
+
+.filter-apply-btn:hover {
+    background: var(--accent);
+}
+
+/* ------------------------------------------------------------------ */
 /* Profile Page Styles                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -926,5 +1054,34 @@
     .profile-table thead th:first-child,
     .profile-table tbody td:first-child {
         padding-left: 0;
+    }
+
+    .filter-bar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 0.65rem 0.75rem;
+    }
+
+    .filter-separator {
+        width: 100%;
+        height: 1px;
+    }
+
+    .filter-date-form {
+        width: 100%;
+    }
+
+    .filter-date-inputs {
+        width: 100%;
+    }
+
+    .filter-date-label {
+        flex: 1;
+    }
+
+    .filter-date-input {
+        max-width: none;
+        flex: 1;
+        width: 100%;
     }
 }

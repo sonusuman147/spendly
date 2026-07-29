@@ -304,8 +304,11 @@ def clear_expenses():
     conn.close()
 
 
-def get_user_expenses_summary(user_id):
-    """Return a summary dictionary of a user's expenses.
+def get_user_expenses_summary(user_id, start_date=None, end_date=None):
+    """Return a summary dictionary of a user's expenses, optionally filtered by date range.
+
+    When start_date and/or end_date are provided, only expenses with date >= start_date
+    and date <= end_date are included. Dates should be ISO format strings (YYYY-MM-DD).
 
     Returns a dict with:
       - total_expenses: float — sum of all expense amounts (0.0 if none)
@@ -319,30 +322,41 @@ def get_user_expenses_summary(user_id):
     conn = get_db()
     cursor = conn.cursor()
 
+    # Build dynamic WHERE clause for date filtering
+    base_where = "WHERE user_id = ?"
+    params = [user_id]
+
+    if start_date:
+        base_where += " AND date >= ?"
+        params.append(start_date)
+    if end_date:
+        base_where += " AND date <= ?"
+        params.append(end_date)
+
     # Total and count
     cursor.execute(
         "SELECT COALESCE(SUM(amount), 0.0) AS total_expenses, "
         "COUNT(*) AS expense_count "
-        "FROM expenses WHERE user_id = ?",
-        (user_id,),
+        f"FROM expenses {base_where}",
+        tuple(params),
     )
     totals = dict(cursor.fetchone())
 
     # Category breakdown
     cursor.execute(
         "SELECT category, SUM(amount) AS total, COUNT(*) AS count "
-        "FROM expenses WHERE user_id = ? "
+        f"FROM expenses {base_where} "
         "GROUP BY category ORDER BY total DESC",
-        (user_id,),
+        tuple(params),
     )
     breakdown = [dict(row) for row in cursor.fetchall()]
 
     # Recent expenses
     cursor.execute(
         "SELECT amount, category, date, description "
-        "FROM expenses WHERE user_id = ? "
+        f"FROM expenses {base_where} "
         "ORDER BY date DESC, created_at DESC LIMIT 5",
-        (user_id,),
+        tuple(params),
     )
     recent = [dict(row) for row in cursor.fetchall()]
 

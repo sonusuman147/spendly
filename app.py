@@ -225,6 +225,11 @@ def logout():
 def profile():
     """Render the profile page with user info and expense summary.
 
+    Supports optional date filtering via GET query parameters:
+      - period: "1m" (this month), "3m" (last 3 months), "6m" (last 6 months), "all"
+      - start_date: custom start date (YYYY-MM-DD)
+      - end_date: custom end date (YYYY-MM-DD)
+
     Requires authentication — redirects to /login if session is missing.
     Clears orphaned sessions if the user no longer exists.
     """
@@ -237,8 +242,60 @@ def profile():
         flash("Session expired. Please sign in again.", "error")
         return redirect(url_for("login"))
 
-    summary = get_user_expenses_summary(session["user_id"])
-    return render_template("profile.html", user=user, summary=summary)
+    # --- Date filter logic ---
+    today = date_helper.today()
+    start_date = request.args.get("start_date")
+    end_date = request.args.get("end_date")
+    period = request.args.get("period", "all")
+
+    # If a quick filter period is set, compute date range
+    if period == "1m":
+        start_date = today.replace(day=1).isoformat()
+        end_date = today.isoformat()
+    elif period == "3m":
+        # Go back 3 months from today, set to 1st of that month
+        month = today.month - 3
+        year = today.year
+        while month < 1:
+            month += 12
+            year -= 1
+        from datetime import date as dt_date
+        start_date = dt_date(year, month, 1).isoformat()
+        end_date = today.isoformat()
+    elif period == "6m":
+        month = today.month - 6
+        year = today.year
+        while month < 1:
+            month += 12
+            year -= 1
+        from datetime import date as dt_date
+        start_date = dt_date(year, month, 1).isoformat()
+        end_date = today.isoformat()
+    # Otherwise (period is "all" or unspecified), use custom start_date/end_date from query params as-is
+
+    # Validate date formats if provided
+    if start_date:
+        try:
+            from datetime import datetime as dt_validate
+            dt_validate.strptime(start_date, "%Y-%m-%d")
+        except ValueError:
+            start_date = None
+    if end_date:
+        try:
+            from datetime import datetime as dt_validate
+            dt_validate.strptime(end_date, "%Y-%m-%d")
+        except ValueError:
+            end_date = None
+
+    summary = get_user_expenses_summary(session["user_id"], start_date=start_date, end_date=end_date)
+    return render_template(
+        "profile.html",
+        user=user,
+        summary=summary,
+        selected_period=period,
+        filter_start_date=start_date or "",
+        filter_end_date=end_date or "",
+    )
 
 
 @app.route("/profile/update", methods=["POST"])
