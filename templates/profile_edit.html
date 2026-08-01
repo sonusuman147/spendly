@@ -2,6 +2,16 @@
 
 {% block title %}Edit Profile — Spendly{% endblock %}
 
+{% block page_title %}Edit Profile{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('profile') }}" class="app-breadcrumb-link">Dashboard</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Edit Profile</span>
+{% endblock %}
+
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
 {% endblock %}

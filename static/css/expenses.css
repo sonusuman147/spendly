@@ -3,7 +3,7 @@
 /* ------------------------------------------------------------------ */
 
 .expenses-section {
-    padding: 2rem;
+    padding: 0;
     max-width: var(--max-width);
     margin: 0 auto;
 }
@@ -12,13 +12,15 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 2rem;
+    margin-bottom: 1.75rem;
 }
 
 .expenses-title {
-    font-family: var(--font-display);
-    font-size: 1.75rem;
+    font-size: 1.4rem;
+    font-weight: 700;
     color: var(--ink);
+    letter-spacing: -0.01em;
+    line-height: 1.3;
 }
 
 .btn-add {
@@ -26,7 +28,7 @@
     align-items: center;
     gap: 0.5rem;
     background: var(--accent);
-    color: var(--paper);
+    color: #fff;
     padding: 0.55rem 1.25rem;
     border-radius: var(--radius-sm);
     font-family: var(--font-body);
@@ -34,25 +36,33 @@
     font-weight: 500;
     cursor: pointer;
     border: none;
-    transition: background 0.2s;
+    box-shadow: var(--shadow-xs);
+    transition: background var(--duration-fast) ease, transform var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
     text-decoration: none;
+    white-space: nowrap;
 }
 
 .btn-add:hover {
     background: var(--ink);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-sm);
 }
+
+.btn-add i { width: 18px; height: 18px; }
 
 /* Expense table */
 .expenses-table-wrapper {
     background: var(--paper-card);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    overflow: hidden;
+    overflow-x: auto;
+    box-shadow: var(--shadow-xs);
 }
 
 .expenses-table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 640px;
 }
 
 .expenses-table thead {
@@ -63,11 +73,12 @@
 .expenses-table th {
     text-align: left;
     padding: 0.85rem 1rem;
-    font-size: 0.8rem;
+    font-size: 0.72rem;
     font-weight: 600;
     color: var(--ink-muted);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
 }
 
 .expenses-table td {
@@ -75,20 +86,42 @@
     font-size: 0.9rem;
     color: var(--ink-soft);
     border-bottom: 1px solid var(--border-soft);
+    vertical-align: middle;
 }
 
 .expenses-table tbody tr:last-child td {
     border-bottom: none;
 }
 
+.expenses-table tbody tr {
+    transition: background var(--duration-fast) ease;
+}
+
 .expenses-table tbody tr:hover {
-    background: var(--accent-light);
+    background: var(--paper-warm);
+}
+
+.expenses-table tbody tr:hover td {
+    color: var(--ink);
+}
+
+.expense-date {
+    display: inline-block;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--ink-soft);
+    background: var(--paper-warm);
+    border: 1px solid var(--border-soft);
+    padding: 0.15rem 0.5rem;
+    border-radius: var(--radius-xs);
+    white-space: nowrap;
 }
 
 .amount-col {
     text-align: right;
     font-weight: 600;
     color: var(--ink) !important;
+    font-variant-numeric: tabular-nums;
 }
 
 .actions-col {
@@ -169,16 +202,14 @@
 
 /* Expense form */
 .expense-form-section {
-    min-height: calc(100vh - 60px - 100px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 2rem;
+    width: 100%;
+    max-width: var(--auth-width);
+    margin: 0 auto;
+    padding: 1rem 0;
 }
 
 .expense-form-container {
     width: 100%;
-    max-width: var(--auth-width);
 }
 
 .expense-form-card {
@@ -186,12 +217,14 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     padding: 2rem;
+    box-shadow: var(--shadow-sm);
 }
 
 .expense-form-title {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.4rem;
+    font-weight: 700;
     color: var(--ink);
+    letter-spacing: -0.01em;
     margin-bottom: 1.5rem;
 }
 
@@ -205,12 +238,13 @@
     color: var(--ink);
     background: var(--paper);
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
     appearance: auto;
 }
 
 .form-select:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .form-textarea {
@@ -223,13 +257,14 @@
     color: var(--ink);
     background: var(--paper);
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color var(--duration-fast) ease, box-shadow var(--duration-fast) ease;
     resize: vertical;
     min-height: 80px;
 }
 
 .form-textarea:focus {
     border-color: var(--accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
 }
 
 .form-textarea::placeholder,
@@ -266,16 +301,14 @@
 
 /* Delete confirmation */
 .delete-section {
-    min-height: calc(100vh - 60px - 100px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem 2rem;
+    width: 100%;
+    max-width: 520px;
+    margin: 0 auto;
+    padding: 1rem 0;
 }
 
 .delete-container {
     width: 100%;
-    max-width: 480px;
 }
 
 .delete-card {
@@ -284,6 +317,7 @@
     border-radius: var(--radius-md);
     padding: 2rem;
     text-align: center;
+    box-shadow: var(--shadow-sm);
 }
 
 .delete-icon {
@@ -293,10 +327,11 @@
 }
 
 .delete-title {
-    font-family: var(--font-display);
-    font-size: 1.5rem;
+    font-size: 1.3rem;
+    font-weight: 700;
     color: var(--ink);
     margin-bottom: 0.75rem;
+    letter-spacing: -0.01em;
 }
 
 .delete-text {
@@ -355,4 +390,62 @@
 
 .btn-danger:hover {
     background: #a93226;
+}
+
+/* ------------------------------------------------------------------ */
+/* Responsive                                                          */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 640px) {
+    .expenses-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .expenses-header .btn-add {
+        justify-content: center;
+    }
+
+    .expense-form-card,
+    .delete-card {
+        padding: 1.4rem;
+    }
+
+    .expense-form-section,
+    .delete-section {
+        padding: 0.5rem 0;
+    }
+
+    .form-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .form-actions .btn-submit,
+    .form-actions .btn-cancel {
+        width: 100%;
+        text-align: center;
+    }
+
+    .form-actions .btn-cancel {
+        padding: 0.65rem 1.25rem;
+    }
+
+    .delete-actions {
+        flex-direction: column-reverse;
+        align-items: stretch;
+    }
+
+    .delete-actions .btn-danger,
+    .delete-actions .btn-cancel {
+        width: 100%;
+        text-align: center;
+    }
+
+    .btn-action {
+        padding: 0.35rem 0.6rem;
+        margin-left: 0.35rem;
+    }
 }
