@@ -1,41 +1,22 @@
-# Edit Profile Page Redesign - Complete ✓
+# Theme Switch Implementation — Progress Tracker
 
-## ✅ Step 1: Update `templates/base.html` — Navbar Redesign
-- User chip with dynamic initials (green circle `#1B4332`), name, dropdown chevron
-- "Sign out" as outlined button with `log-out` icon
-- "Dashboard" link alongside "Expenses"
-- Navbar stays white
+## Steps
 
-## ✅ Step 2: Rewrite `templates/profile_edit.html` — Complete Layout
-- Page header: muted "← Back to Profile", bold "Edit Profile" H1, gray subtext
-- Card 1 (Profile Information): Two-column grid — left avatar, right fields
-- Dynamic avatar initials from `user.name`
-- Camera icon button overlay on avatar
-- Full name + Email side-by-side with leading person/mail icons
-- Green shield-check note below email
-- Card 2 (Change Password): Lock icon title + subtitle, 3 pill-style rows with eye-toggle
-- Hidden actual inputs wired via JS (name attributes unchanged: `current_password`, `new_password`, `confirm_new_password`)
-- Pale green password tips banner with shield-check icon
-- Footer bar: outlined gray "Cancel" + solid dark-green "Save Changes" with save icon
-- Flash messages preserved and styled
-- Form action unchanged (`method="POST" action="{{ url_for('profile_edit') }}"`)
-- All input names preserved for backend compatibility
+- [x] Step 1: Analyze codebase and create plan
+- [x] Step 2: Edit `base.html` — Add before-paint script in `<head>`, theme switch HTML in navbar, after-DOM persistence script
+- [x] Step 3: Edit `style.css` — Add light/dark/system theme variable overrides + switch component CSS
+- [x] Step 4: Edit `profile.css` — Replace hardcoded colors with CSS variables for dark-mode compatibility (incl. edit-profile section + category tags + bar fills)
+- [x] Step 5: Edit `expenses.css` — Convert hardcoded category tag colors to theme-aware CSS variables
+- [x] Step 6: Fix dark-mode inconsistencies (footer tokens, `.auth-error` border, `.footer-name`/`.footer-*` muted text)
+- [x] Step 7: Verify all files are consistent
 
-## ✅ Step 3: Add styles to `static/css/profile.css`
-- All new styles scoped under `.edit-page-*` prefix (no conflict with profile view)
-- White cards with 18px border-radius, subtle shadow, generous padding
-- Avatar: 96px pale green circle, 2rem bold initials, camera overlay button
-- Two-column grid layout (1fr 1.8fr)
-- Inputs styled with 9px radius, soft borders, icon-left padding, light fill
-- Password pill rows with lock icon, label+hint, eye toggle
-- Tips banner with pale green background
-- Footer bar: white, right-aligned, Cancel/Save buttons
-- Deep forest green accent (`#1B4332`) throughout
-- Responsive: collapses to single column at 768px
+## Files Modified
 
-## ✅ Step 4: Add password toggle JS
-- Vanilla JS in `{% block scripts %}` — event delegation on all `.edit-pwd-toggle` buttons
-- Toggles between `eye` and `eye-off` Lucide icons
-- Updates `aria-label` for accessibility
-- Focus sync: clicking pill row focuses hidden input
+| File | Change |
+|------|--------|
+| `templates/base.html` | Theme switch HTML + before-paint restore script + change-persistence script |
+| `static/css/style.css` | `:root` tokens, dark/system overrides, `.theme-field`/`.theme-switch` component CSS, footer tokens, category/bar tokens |
+| `static/css/profile.css` | Edit-profile hardcoded colors → CSS vars; `.cat-*` tags → `--cat-*` tokens; `.bar-*` fills → `--bar-*` tokens |
+| `static/css/expenses.css` | `.cat-*` tags → `--cat-*` tokens |
+</content>
 

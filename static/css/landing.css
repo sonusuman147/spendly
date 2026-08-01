@@ -14,19 +14,19 @@
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
-    background: #e6f0e8;
-    color: #1a472a;
+    background: var(--accent-light);
+    color: var(--accent);
     font-size: 0.8rem;
     font-weight: 500;
     padding: 0.45rem 1rem;
     border-radius: 999px;
     margin-bottom: 2.25rem;
-    border: 1px solid #d0e0d4;
+    border: 1px solid var(--border-soft);
 }
 
 .hero-badge::before {
     content: "•";
-    color: #1a472a;
+    color: var(--accent);
     font-size: 1.1rem;
 }
 
@@ -107,7 +107,7 @@
 }
 
 .dashboard-card {
-    background: #ffffff;
+    background: var(--paper-card);
     border: 1px solid var(--border);
     border-radius: 20px;
     padding: 2rem 2rem 1.75rem;
@@ -142,7 +142,7 @@
 }
 
 .summary-card {
-    background: #f8f7f4;
+    background: var(--paper-warm);
     border: 1px solid var(--border-soft);
     border-radius: 14px;
     padding: 1rem 1.1rem;
@@ -169,7 +169,7 @@
     font-weight: 500;
 }
 
-.summary-change.negative { color: #d1453b; }
+.summary-change.negative { color: var(--danger); }
 .summary-change.positive { color: var(--accent); }
 .summary-change.neutral { color: var(--ink-muted); }
 

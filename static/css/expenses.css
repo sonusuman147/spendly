@@ -134,13 +134,13 @@
     font-weight: 500;
 }
 
-.cat-food { background: #fef3c7; color: #92400e; }
-.cat-transport { background: #dbeafe; color: #1e40af; }
-.cat-bills { background: #fce7f3; color: #9d174d; }
-.cat-health { background: #d1fae5; color: #065f46; }
-.cat-entertainment { background: #ede9fe; color: #5b21b6; }
-.cat-shopping { background: #fce4ec; color: #880e4f; }
-.cat-other { background: #e5e7eb; color: #374151; }
+.cat-food { background: var(--cat-food-bg); color: var(--cat-food-text); }
+.cat-transport { background: var(--cat-transport-bg); color: var(--cat-transport-text); }
+.cat-bills { background: var(--cat-bills-bg); color: var(--cat-bills-text); }
+.cat-health { background: var(--cat-health-bg); color: var(--cat-health-text); }
+.cat-entertainment { background: var(--cat-entertainment-bg); color: var(--cat-entertainment-text); }
+.cat-shopping { background: var(--cat-shopping-bg); color: var(--cat-shopping-text); }
+.cat-other { background: var(--cat-other-bg); color: var(--cat-other-text); }
 
 /* Empty state */
 .expenses-empty {
