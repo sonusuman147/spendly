@@ -148,25 +148,11 @@ body:has(#theme-dark:checked) {
     gap: 0.4rem;
 }
 
-.theme-label {
-    display: block;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: .05em;
-    color: var(--ink-muted);
-    margin-bottom: 8px;
-}
-
-/* In the top navbar, keep the label inline with the switch */
+/* In the top navbar, keep the switch horizontally aligned */
 .navbar .theme-field {
     flex-direction: row;
     align-items: center;
     gap: 0.6rem;
-}
-
-.navbar .theme-label {
-    margin-bottom: 0;
-    white-space: nowrap;
 }
 
 .theme-switch {
