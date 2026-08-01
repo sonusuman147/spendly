@@ -1,6 +1,14 @@
 {% extends "base.html" %}
 
-{% block title %}Profile — Spendly{% endblock %}
+{% block title %}Dashboard — Spendly{% endblock %}
+
+{% block page_title %}Dashboard{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Dashboard</span>
+{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/profile.css') }}">
@@ -9,6 +17,7 @@
 {% block content %}
 
 <section class="profile-section">
+
     <div class="profile-container">
 
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -19,25 +28,24 @@
           {% endif %}
         {% endwith %}
 
-        <!-- User Info Header -->
-        <div class="profile-header">
-            <div class="profile-avatar">
-                <i data-lucide="user" class="profile-avatar-icon"></i>
-            </div>
-            <div class="profile-header-info">
-                <div class="profile-name">{{ user.name }}</div>
-                <div class="profile-email">{{ user.email }}</div>
-                <div class="profile-member-since">Member since {{ user.member_since }}</div>
-            </div>
-            <div class="profile-header-action">
-                <a href="{{ url_for('profile_edit') }}" class="btn-edit-profile">
-                    <i data-lucide="edit" class="btn-icon"></i>
-                    Edit Profile
-                </a>
+        <!-- ============ Welcome Banner ============ -->
+        <div class="welcome-banner">
+            <div class="welcome-banner-inner">
+                <div class="welcome-copy">
+                    <h2 class="welcome-title">Welcome back, {{ user.name }} 👋</h2>
+                    <p class="welcome-subtitle">Here's what your spending looks like. Track every rupee, own your finances.</p>
+                </div>
+                <div class="welcome-actions">
+                    <a href="{{ url_for('add_expense') }}" class="btn-add">
+                        <i data-lucide="plus" width="18" height="18"></i>
+                        Add Expense
+                    </a>
+                    <a href="{{ url_for('list_expenses') }}" class="btn-ghost-light">View Expenses</a>
+                </div>
             </div>
         </div>
 
-        <!-- Date Filter Bar -->
+        <!-- ============ Filter Bar ============ -->
         <div class="filter-bar">
             <div class="filter-quick-buttons">
                 <a href="{{ url_for('profile', period='all') }}"
@@ -62,44 +70,62 @@
                         <input type="date" name="end_date" class="filter-date-input"
                                value="{{ filter_end_date }}">
                     </label>
-                    <button type="submit" class="filter-apply-btn">Apply</button>
+                    <button type="submit" class="filter-apply-btn">
+                        <i data-lucide="filter" width="14" height="14"></i>
+                        Apply
+                    </button>
                 </div>
             </form>
         </div>
 
-        <!-- Summary Cards Row -->
+        <!-- ============ Stat Cards ============ -->
         <div class="profile-stats">
             <div class="stat-card">
-                <div class="stat-header">
-                    <i data-lucide="wallet" class="stat-icon"></i>
-                    <div class="stat-label">Total Spent</div>
+                <div class="stat-card-top">
+                    <div class="stat-icon-wrap">
+                        <i data-lucide="wallet" class="stat-icon"></i>
+                    </div>
+                    <span class="stat-change negative">Total</span>
                 </div>
+                <div class="stat-label">Total Spent</div>
                 <div class="stat-value">₹{{ "%.2f"|format(summary.total_expenses) }}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-header">
-                    <i data-lucide="receipt" class="stat-icon"></i>
-                    <div class="stat-label">Transactions</div>
+                <div class="stat-card-top">
+                    <div class="stat-icon-wrap">
+                        <i data-lucide="receipt" class="stat-icon"></i>
+                    </div>
+                    <span class="stat-change neutral">Count</span>
                 </div>
+                <div class="stat-label">Transactions</div>
                 <div class="stat-value">{{ summary.expense_count }}</div>
             </div>
             <div class="stat-card">
-                <div class="stat-header">
-                    <i data-lucide="trending-up" class="stat-icon"></i>
-                    <div class="stat-label">Top Category</div>
+                <div class="stat-card-top">
+                    <div class="stat-icon-wrap">
+                        <i data-lucide="trending-up" class="stat-icon"></i>
+                    </div>
+                    <span class="stat-change positive">Top</span>
                 </div>
-                <div class="stat-value">{{ summary.top_category }}</div>
+                <div class="stat-label">Top Category</div>
+                <div class="stat-value stat-value-sm">{{ summary.top_category }}</div>
             </div>
         </div>
 
-        <!-- Two-Column Dashboard -->
+        <!-- ============ Two-Column Dashboard ============ -->
         <div class="profile-dashboard">
 
             <!-- Recent Transactions -->
             <div class="dashboard-card">
                 <div class="dashboard-card-header">
-                    <i data-lucide="receipt" class="dashboard-card-icon"></i>
-                    <h2 class="dashboard-card-title">Recent Transactions</h2>
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="receipt" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Recent Transactions</h2>
+                    </div>
+                    <a href="{{ url_for('list_expenses') }}" class="card-view-all">
+                        View all
+                        <i data-lucide="arrow-right" width="14" height="14"></i>
+                    </a>
                 </div>
                 <div class="dashboard-card-body">
                     {% if summary.recent_expenses %}
@@ -116,7 +142,7 @@
                             <tbody>
                                 {% for exp in summary.recent_expenses %}
                                 <tr>
-                                    <td>{{ exp.date }}</td>
+                                    <td><span class="txn-date">{{ exp.date }}</span></td>
                                     <td>{{ exp.description or "—" }}</td>
                                     <td><span class="category-tag cat-{{ exp.category.lower() }}">{{ exp.category }}</span></td>
                                     <td class="amount-col">₹{{ "%.2f"|format(exp.amount) }}</td>
@@ -131,31 +157,101 @@
                 </div>
             </div>
 
-            <!-- By Category -->
+            <!-- By Category — Donut Chart Placeholder -->
             <div class="dashboard-card">
                 <div class="dashboard-card-header">
-                    <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
-                    <h2 class="dashboard-card-title">By Category</h2>
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">By Category</h2>
+                    </div>
                 </div>
                 <div class="dashboard-card-body">
                     {% if summary.category_breakdown %}
-                        {% for cat in summary.category_breakdown %}
-                        <div class="category-row">
-                            <span class="category-label">{{ cat.category }}</span>
-                            <div class="category-bar-track">
-                                <div class="category-bar-fill bar-{{ cat.category.lower() }}"
-                                     style="width: {{ (cat.total / summary.total_expenses * 100)|round|int if summary.total_expenses > 0 else 0 }}%">
-                                </div>
+                    {% set ns = namespace(stops=[], acc=0) %}
+                    {% for cat in summary.category_breakdown %}
+                        {% set pct = (cat.total / summary.total_expenses * 100)|round|int if summary.total_expenses > 0 else 0 %}
+                        {% set _ = ns.stops.append("var(--bar-" ~ cat.category.lower() ~ ") " ~ ns.acc ~ "% " ~ (ns.acc + pct) ~ "%") %}
+                        {% set ns.acc = ns.acc + pct %}
+                    {% endfor %}
+                    <div class="category-chart-wrap">
+                        <!-- Pure CSS donut chart using conic-gradient -->
+                        <div class="donut-chart"
+                             role="img"
+                             aria-label="Spending by category"
+                             style="background: conic-gradient({{ ns.stops | join(', ') }});">
+                            <div class="donut-hole">
+                                <span class="donut-total">₹{{ "%.2f"|format(summary.total_expenses) }}</span>
+                                <span class="donut-total-label">Total</span>
                             </div>
-                            <span class="category-amount">₹{{ "%.2f"|format(cat.total) }}</span>
                         </div>
-                        {% endfor %}
+
+                        <!-- Legend -->
+                        <ul class="category-legend">
+                            {% for cat in summary.category_breakdown %}
+                            <li class="category-legend-item">
+                                <span class="legend-dot" style="background: var(--bar-{{ cat.category.lower() }})"></span>
+                                <span class="legend-label">{{ cat.category }}</span>
+                                <span class="legend-amount">₹{{ "%.2f"|format(cat.total) }}</span>
+                                <span class="legend-pct">
+                                    {{ (cat.total / summary.total_expenses * 100)|round|int if summary.total_expenses > 0 else 0 }}%
+                                </span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                    </div>
                     {% else %}
                         <p class="profile-empty">No expenses yet. Start tracking!</p>
                     {% endif %}
                 </div>
             </div>
 
+        </div>
+
+        <!-- ============ Quick Action Cards ============ -->
+        <div class="quick-actions">
+            <h3 class="quick-actions-title">Quick Actions</h3>
+            <div class="quick-actions-grid">
+                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                    <div class="quick-action-icon" style="--qa-accent: var(--accent)">
+                        <i data-lucide="piggy-bank"></i>
+                    </div>
+                    <div class="quick-action-body">
+                        <h4 class="quick-action-name">Budgets</h4>
+                        <p class="quick-action-desc">Set monthly spending limits and stay in control.</p>
+                    </div>
+                    <span class="quick-action-badge">Soon</span>
+                </a>
+                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                    <div class="quick-action-icon" style="--qa-accent: var(--success)">
+                        <i data-lucide="target"></i>
+                    </div>
+                    <div class="quick-action-body">
+                        <h4 class="quick-action-name">Goals</h4>
+                        <p class="quick-action-desc">Save toward what matters with measurable goals.</p>
+                    </div>
+                    <span class="quick-action-badge">Soon</span>
+                </a>
+                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                    <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
+                        <i data-lucide="bar-chart-3"></i>
+                    </div>
+                    <div class="quick-action-body">
+                        <h4 class="quick-action-name">Reports</h4>
+                        <p class="quick-action-desc">Dive deep into trends with detailed reporting.</p>
+                    </div>
+                    <span class="quick-action-badge">Soon</span>
+                </a>
+                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                    <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
+                        <i data-lucide="sparkles"></i>
+                    </div>
+                    <div class="quick-action-body">
+                        <h4 class="quick-action-name">Insights</h4>
+                        <p class="quick-action-desc">Uncover patterns and smart ways to save.</p>
+                    </div>
+                    <span class="quick-action-badge">Soon</span>
+                </a>
+            </div>
         </div>
 
     </div>
@@ -166,3 +262,4 @@
 {% block scripts %}
 <script>lucide.createIcons();</script>
 {% endblock %}
+

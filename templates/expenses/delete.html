@@ -2,6 +2,16 @@
 
 {% block title %}Delete Expense — Spendly{% endblock %}
 
+{% block page_title %}Delete Expense{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('list_expenses') }}" class="app-breadcrumb-link">Expenses</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Delete</span>
+{% endblock %}
+
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/expenses.css') }}">
 {% endblock %}
@@ -38,6 +48,7 @@
                     <span class="delete-detail-label">Date</span>
                     <span class="delete-detail-value">{{ expense.date }}</span>
                 </div>
+            </div>
 
             <div class="delete-actions">
                 <form method="POST" action="{{ url_for('delete_expense_view', id=expense.id) }}">
@@ -49,6 +60,7 @@
                 <a href="{{ url_for('list_expenses') }}" class="btn-cancel">Cancel</a>
             </div>
 
+        </div>
     </div>
 </section>
 

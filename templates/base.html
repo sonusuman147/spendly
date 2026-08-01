@@ -1,3 +1,4 @@
+{% if session.user_id %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,12 +13,281 @@
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
 <body>
 
+    <!-- =============================================================== -->
+    <!-- AUTHENTICATED APP SHELL — Left Sidebar Layout                    -->
+    <!-- =============================================================== -->
+    <div class="app-shell" data-sidebar="expanded">
+
+        <!-- Mobile backdrop (drawer) -->
+        <div class="app-backdrop" data-app-backdrop hidden></div>
+
+        <!-- ================= LEFT SIDEBAR ================= -->
+        <aside class="app-sidebar" id="appSidebar" aria-label="Main navigation">
+
+            <!-- Logo row -->
+            <div class="sidebar-brand">
+                <a href="{{ url_for('profile') }}" class="sidebar-logo" aria-label="Spendly dashboard">
+                    <span class="sidebar-logo-mark">◈</span>
+                    <span class="sidebar-logo-text">Spendly</span>
+                </a>
+                <button type="button" class="sidebar-close-btn" data-sidebar-close aria-label="Close sidebar">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+
+            <!-- User section -->
+            <div class="sidebar-user">
+                {% set shell_name = user.name if user else (session.get('user_name') or 'Account') %}
+                <div class="sidebar-avatar">{{ shell_name[:1].upper() }}{% if ' ' in shell_name %}{{ shell_name.split()[-1][:1].upper() }}{% endif %}</div>
+                <div class="sidebar-user-info">
+                    <span class="sidebar-user-name">{{ shell_name }}</span>
+                    {% if user %}
+                    <span class="sidebar-user-email">{{ user.email }}</span>
+                    <span class="sidebar-user-since">Member since {{ user.member_since }}</span>
+                    {% else %}
+                    <span class="sidebar-user-email">Personal account</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Navigation -->
+            <nav class="sidebar-nav">
+                <p class="sidebar-nav-label">Menu</p>
+                <ul class="sidebar-menu">
+                    <li>
+                        <a href="{{ url_for('profile') }}" class="sidebar-link {% if request.endpoint == 'profile' %}active{% endif %}">
+                            <i data-lucide="layout-dashboard" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Dashboard</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="{{ url_for('list_expenses') }}" class="sidebar-link {% if request.endpoint in ['list_expenses', 'add_expense', 'edit_expense', 'delete_expense_view'] %}active{% endif %}">
+                            <i data-lucide="wallet" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Expenses</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="arrow-left-right" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Transactions</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="tags" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Categories</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="bar-chart-3" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Reports</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="piggy-bank" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Budgets</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="target" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Goals</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="settings" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Settings</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                            <i data-lucide="circle-help" class="sidebar-link-icon"></i>
+                            <span class="sidebar-link-text">Help &amp; Support</span>
+                            <span class="sidebar-badge">Soon</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <!-- Sidebar footer -->
+            <div class="sidebar-footer">
+                <a href="{{ url_for('logout') }}" class="sidebar-signout">
+                    <i data-lucide="log-out" class="sidebar-link-icon"></i>
+                    <span class="sidebar-link-text">Sign Out</span>
+                </a>
+                <p class="sidebar-copy">© 2026 Spendly</p>
+            </div>
+        </aside>
+
+        <!-- ================= MAIN COLUMN ================= -->
+        <div class="app-main">
+
+            <!-- Top header -->
+            <header class="app-header">
+                <div class="app-header-left">
+                    <button type="button" class="app-hamburger" data-sidebar-toggle aria-label="Toggle sidebar">
+                        <i data-lucide="menu"></i>
+                    </button>
+                    <div class="app-heading">
+                        <h1 class="app-page-title">{% block page_title %}Dashboard{% endblock %}</h1>
+                        <nav class="app-breadcrumb" aria-label="Breadcrumb">
+                            {% block breadcrumb %}
+                            <span>Home</span>
+                            <span class="app-breadcrumb-sep">/</span>
+                            <span class="app-breadcrumb-current">Dashboard</span>
+                            {% endblock %}
+                        </nav>
+                    </div>
+                </div>
+
+                <div class="app-header-right">
+                    <!-- Search (UI only) -->
+                    <div class="app-search">
+                        <i data-lucide="search" class="app-search-icon"></i>
+                        <input type="search" class="app-search-input" placeholder="Search…" aria-label="Search">
+                        <kbd class="app-search-kbd">/</kbd>
+                    </div>
+
+                    <!-- Notification (UI only) -->
+                    <button type="button" class="app-icon-btn" data-notification-toggle aria-label="Notifications">
+                        <i data-lucide="bell"></i>
+                        <span class="app-notif-dot"></span>
+                    </button>
+
+                    <!-- Theme switch -->
+                    <div class="theme-field app-theme-field">
+                        <div class="theme-switch" role="radiogroup" aria-label="Theme">
+                            <input type="radio" name="theme" id="theme-light" value="light">
+                            <label for="theme-light" aria-label="Light theme">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                     stroke="currentColor" stroke-width="1.5">
+                                    <circle cx="12" cy="12" r="4"/>
+                                    <path d="M12 2v2M12 20v2M4 12H2M22 12h-2
+                                             M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4
+                                             M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>
+                                </svg>
+                            </label>
+
+                            <input type="radio" name="theme" id="theme-dark" value="dark" checked>
+                            <label for="theme-dark" aria-label="Dark theme">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                     stroke="currentColor" stroke-width="1.5">
+                                    <path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/>
+                                </svg>
+                            </label>
+
+                            <input type="radio" name="theme" id="theme-system" value="system">
+                            <label for="theme-system" aria-label="System theme">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
+                                     stroke="currentColor" stroke-width="1.5">
+                                    <rect x="3" y="4" width="18" height="12" rx="2"/>
+                                    <path d="M8 20h8M12 16v4"/>
+                                </svg>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- User profile dropdown -->
+                    <div class="app-profile" data-profile-dropdown>
+                        <button type="button" class="app-profile-btn" data-profile-toggle aria-label="User menu">
+                            <span class="app-profile-avatar">{{ shell_name[:1].upper() }}{% if ' ' in shell_name %}{{ shell_name.split()[-1][:1].upper() }}{% endif %}</span>
+                            <span class="app-profile-name">{{ shell_name.split()[0] }}</span>
+                            <i data-lucide="chevron-down" class="app-profile-chevron"></i>
+                        </button>
+                        <div class="app-profile-menu" hidden>
+                            <div class="app-profile-menu-head">
+                                <strong>{{ shell_name }}</strong>
+                                <span>{{ user.email if user else (session.get('user_email') or '') }}</span>
+                            </div>
+                            <a href="{{ url_for('profile') }}" class="app-profile-menu-item">
+                                <i data-lucide="user" class="app-profile-menu-icon"></i>
+                                My Dashboard
+                            </a>
+                            <a href="{{ url_for('profile_edit') }}" class="app-profile-menu-item">
+                                <i data-lucide="settings" class="app-profile-menu-icon"></i>
+                                Profile Settings
+                            </a>
+                            <a href="{{ url_for('profile_edit') }}" class="app-profile-menu-item">
+                                <i data-lucide="lock" class="app-profile-menu-icon"></i>
+                                Change Password
+                            </a>
+                            <div class="app-profile-menu-sep"></div>
+                            <a href="{{ url_for('logout') }}" class="app-profile-menu-item app-profile-menu-danger">
+                                <i data-lucide="log-out" class="app-profile-menu-icon"></i>
+                                Sign Out
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page content -->
+            <main class="main-content app-content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>document.addEventListener("DOMContentLoaded", lucide.createIcons);</script>
+    <script>
+        (function () {
+            var pending = document.documentElement.dataset.pendingTheme;
+            if (pending) {
+                var el = document.getElementById('theme-' + pending);
+                if (el) el.checked = true;
+            }
+            document.querySelectorAll('.theme-switch input').forEach(function (input) {
+                input.addEventListener('change', function () {
+                    localStorage.setItem('spendly-theme', input.value);
+                });
+            });
+        })();
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
+
+{% else %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title_pub %}Spendly{% endblock %}</title>
+    <script>
+        (function () {
+            var saved = localStorage.getItem('spendly-theme'); /* 'light' | 'dark' | 'system' */
+            if (saved) document.documentElement.dataset.pendingTheme = saved;
+        })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block head_pub %}{% endblock %}
+</head>
+<body>
+
+    <!-- =============================================================== -->
+    <!-- PUBLIC SHELL — Landing / Auth / Legal                            -->
+    <!-- =============================================================== -->
     <nav class="navbar">
         <div class="nav-inner">
             <a href="{{ url_for('landing') }}" class="nav-brand">
@@ -28,11 +298,6 @@
                 {% if session.user_id %}
                 <a href="{{ url_for('list_expenses') }}">Expenses</a>
                 <a href="{{ url_for('profile') }}">Dashboard</a>
-                <div class="nav-user-chip">
-                    <div class="nav-user-avatar">{{ session.user_name[:1].upper() }}{% if ' ' in session.user_name %}{{ session.user_name.split()[-1][:1].upper() }}{% endif %}</div>
-                    <span class="nav-user-name">{{ session.user_name.split()[0] }}</span>
-                    <i data-lucide="chevron-down" class="nav-chevron"></i>
-                </div>
                 <a href="{{ url_for('logout') }}" class="nav-signout">
                     <i data-lucide="log-out" class="btn-icon"></i>
                     Sign out
@@ -78,7 +343,7 @@
     </nav>
 
     <main class="main-content">
-        {% block content %}{% endblock %}
+        {% block content_pub %}{% endblock %}
     </main>
 
     <footer class="footer">
@@ -114,6 +379,8 @@
             });
         })();
     </script>
-    {% block scripts %}{% endblock %}
+    {% block scripts_pub %}{% endblock %}
 </body>
 </html>
+{% endif %}
+

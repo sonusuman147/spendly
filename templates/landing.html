@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Spendly — Track Every Rupee{% endblock %}
+{% block title_pub %}Spendly — Track Every Rupee{% endblock %}
 
-{% block head %}
+{% block head_pub %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/landing.css') }}">
 {% endblock %}
 
-{% block content %}
+{% block content_pub %}
 
 <section class="hero">
     <div class="hero-badge">Free to use · No credit card needed</div>
@@ -117,7 +117,7 @@
 
 {% endblock %}
 
-{% block scripts %}
+{% block scripts_pub %}
 <script>
 const YOUTUBE_PLACEHOLDER = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const modal = document.getElementById("videoModal");

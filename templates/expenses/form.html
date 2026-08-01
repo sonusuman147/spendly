@@ -2,6 +2,16 @@
 
 {% block title %}{% if mode == "add" %}Add Expense{% else %}Edit Expense{% endif %} — Spendly{% endblock %}
 
+{% block page_title %}{% if mode == "add" %}Add Expense{% else %}Edit Expense{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('list_expenses') }}" class="app-breadcrumb-link">Expenses</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">{% if mode == "add" %}Add{% else %}Edit{% endif %}</span>
+{% endblock %}
+
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/expenses.css') }}">
 {% endblock %}

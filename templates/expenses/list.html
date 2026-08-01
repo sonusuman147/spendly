@@ -2,6 +2,14 @@
 
 {% block title %}Expenses — Spendly{% endblock %}
 
+{% block page_title %}Expenses{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Expenses</span>
+{% endblock %}
+
 {% block head %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/expenses.css') }}">
 {% endblock %}
@@ -40,7 +48,7 @@
             <tbody>
                 {% for exp in expenses %}
                 <tr>
-                    <td>{{ exp.date }}</td>
+                    <td><span class="expense-date">{{ exp.date }}</span></td>
                     <td>{{ exp.description or "—" }}</td>
                     <td><span class="category-tag cat-{{ exp.category.lower() }}">{{ exp.category }}</span></td>
                     <td class="amount-col">₹{{ "%.2f"|format(exp.amount) }}</td>
