@@ -148,7 +148,7 @@
 .auth-error {
     background: var(--danger-light);
     color: var(--danger);
-    border: 1px solid #f5c6c2;
+    border: 1px solid var(--danger-light);
     border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
@@ -158,7 +158,7 @@
 .auth-success {
     background: var(--accent-light);
     color: var(--accent);
-    border: 1px solid #d0e0d4;
+    border: 1px solid var(--accent-light);
     border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
@@ -414,13 +414,13 @@
     letter-spacing: 0.01em;
 }
 
-.cat-food      { background: #fef2f2; color: #dc2626; }
-.cat-transport { background: #fffbeb; color: #d97706; }
-.cat-bills     { background: #eef2ff; color: #4f46e5; }
-.cat-health    { background: #ecfdf5; color: #059669; }
-.cat-entertainment { background: #fdf2f8; color: #db2777; }
-.cat-shopping  { background: #f5f3ff; color: #7c3aed; }
-.cat-other     { background: #f3f4f6; color: #6b7280; }
+.cat-food      { background: var(--cat-food-bg); color: var(--cat-food-text); }
+.cat-transport { background: var(--cat-transport-bg); color: var(--cat-transport-text); }
+.cat-bills     { background: var(--cat-bills-bg); color: var(--cat-bills-text); }
+.cat-health    { background: var(--cat-health-bg); color: var(--cat-health-text); }
+.cat-entertainment { background: var(--cat-entertainment-bg); color: var(--cat-entertainment-text); }
+.cat-shopping  { background: var(--cat-shopping-bg); color: var(--cat-shopping-text); }
+.cat-other     { background: var(--cat-other-bg); color: var(--cat-other-text); }
 
 /* ------------------------------------------------------------------ */
 /* Category Breakdown — Colored progress bars                          */
@@ -457,13 +457,13 @@
     transition: width 0.5s ease;
 }
 
-.bar-food      { background: #dc2626; }
-.bar-transport { background: #d97706; }
-.bar-bills     { background: #4f46e5; }
-.bar-health    { background: #059669; }
-.bar-entertainment { background: #db2777; }
-.bar-shopping  { background: #7c3aed; }
-.bar-other     { background: #6b7280; }
+.bar-food      { background: var(--bar-food); }
+.bar-transport { background: var(--bar-transport); }
+.bar-bills     { background: var(--bar-bills); }
+.bar-health    { background: var(--bar-health); }
+.bar-entertainment { background: var(--bar-entertainment); }
+.bar-shopping  { background: var(--bar-shopping); }
+.bar-other     { background: var(--bar-other); }
 
 .category-amount {
     font-size: 0.8rem;
@@ -495,7 +495,7 @@
 .edit-page {
     padding: 2.5rem 2rem 4rem;
     width: 100%;
-    background: #F7F6F3;
+    background: var(--paper);
 }
 
 .edit-page-inner {
@@ -516,13 +516,13 @@
 .edit-flash.auth-error {
     background: var(--danger-light);
     color: var(--danger);
-    border: 1px solid #f5c6c2;
+    border: 1px solid var(--danger-light);
 }
 
 .edit-flash.auth-success {
-    background: #e8f0eb;
-    color: #1B4332;
-    border: 1px solid #c8dcd0;
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid var(--accent-light);
 }
 
 /* Page Header */
@@ -564,7 +564,7 @@
 /* Cards */
 
 .edit-card {
-    background: #ffffff;
+    background: var(--paper-card);
     border-radius: 18px;
     padding: 2rem;
     margin-bottom: 1.25rem;
@@ -583,7 +583,7 @@
 .edit-section-icon {
     width: 20px;
     height: 20px;
-    color: #1B4332;
+    color: var(--accent);
     flex-shrink: 0;
     margin-top: 2px;
 }
@@ -629,8 +629,8 @@
     width: 96px;
     height: 96px;
     border-radius: 50%;
-    background: #d4e6d4;
-    color: #1B4332;
+    background: var(--accent-light);
+    color: var(--accent);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -647,8 +647,8 @@
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #ffffff;
-    border: 2px solid #e4e1da;
+    background: var(--paper-card);
+    border: 2px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -658,13 +658,13 @@
 }
 
 .edit-avatar-btn:hover {
-    border-color: #1B4332;
+    border-color: var(--accent);
 }
 
 .edit-avatar-btn .edit-icon-sm {
     width: 14px;
     height: 14px;
-    color: #6b6b6b;
+    color: var(--ink-muted);
 }
 
 .edit-avatar-name {
@@ -724,19 +724,19 @@
 .edit-input {
     width: 100%;
     padding: 0.6rem 0.875rem 0.6rem 2.25rem;
-    border: 1.5px solid #e4e1da;
+    border: 1.5px solid var(--border);
     border-radius: 9px;
     font-family: var(--font-body);
     font-size: 0.9rem;
     color: var(--ink);
-    background: #f7f6f3;
+    background: var(--paper);
     outline: none;
     transition: border-color 0.2s, box-shadow 0.2s;
 }
 
 .edit-input:focus {
-    border-color: #1B4332;
-    box-shadow: 0 0 0 2px rgba(27, 67, 50, 0.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .edit-input::placeholder {
@@ -749,7 +749,7 @@
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    background: #e8f0eb;
+    background: var(--accent-light);
     border-radius: 8px;
     padding: 0.6rem 0.85rem;
 }
@@ -757,13 +757,13 @@
 .edit-note-icon {
     width: 15px;
     height: 15px;
-    color: #1B4332;
+    color: var(--accent);
     flex-shrink: 0;
 }
 
 .edit-note span {
     font-size: 0.78rem;
-    color: #1B4332;
+    color: var(--accent);
     font-weight: 500;
 }
 
@@ -780,8 +780,8 @@
     display: flex;
     align-items: center;
     gap: 0.85rem;
-    background: #f7f6f3;
-    border: 1.5px solid #e4e1da;
+    background: var(--paper);
+    border: 1.5px solid var(--border);
     border-radius: 10px;
     padding: 0.7rem 1rem;
     cursor: pointer;
@@ -789,8 +789,8 @@
 }
 
 .edit-password-row:focus-within {
-    border-color: #1B4332;
-    box-shadow: 0 0 0 2px rgba(27, 67, 50, 0.1);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 .edit-pwd-left {
@@ -852,7 +852,7 @@
 }
 
 .edit-pwd-toggle:hover {
-    background: #eeebe4;
+    background: var(--border-soft);
 }
 
 .edit-pwd-toggle .edit-icon-sm {
@@ -867,7 +867,7 @@
     display: flex;
     align-items: flex-start;
     gap: 0.6rem;
-    background: #e8f0eb;
+    background: var(--accent-light);
     border-radius: 10px;
     padding: 0.75rem 1rem;
 }
@@ -875,14 +875,14 @@
 .edit-tips-icon {
     width: 18px;
     height: 18px;
-    color: #1B4332;
+    color: var(--accent);
     flex-shrink: 0;
     margin-top: 1px;
 }
 
 .edit-tips-text {
     font-size: 0.8rem;
-    color: #1B4332;
+    color: var(--accent);
     line-height: 1.5;
 }
 
@@ -893,7 +893,7 @@
 /* Footer Bar */
 
 .edit-footer-bar {
-    background: #ffffff;
+    background: var(--paper-card);
     border-radius: 18px;
     padding: 1rem 1.5rem;
     display: flex;
@@ -910,7 +910,7 @@
     background: transparent;
     color: var(--ink-muted);
     padding: 0.55rem 1.1rem;
-    border: 1.5px solid #e4e1da;
+    border: 1.5px solid var(--border);
     border-radius: 9px;
     font-family: var(--font-body);
     font-size: 0.9rem;
@@ -929,8 +929,8 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    background: #1B4332;
-    color: #ffffff;
+    background: var(--ink);
+    color: var(--paper);
     padding: 0.55rem 1.25rem;
     border: none;
     border-radius: 9px;
@@ -942,7 +942,7 @@
 }
 
 .edit-btn-save:hover {
-    background: #143628;
+    background: var(--accent);
 }
 
 .edit-btn-save .edit-icon-sm,
@@ -984,7 +984,7 @@
 
     .edit-avatar-col {
         padding-bottom: 0.5rem;
-        border-bottom: 1px solid #eeebe4;
+        border-bottom: 1px solid var(--border-soft);
     }
 
     .edit-footer-bar {

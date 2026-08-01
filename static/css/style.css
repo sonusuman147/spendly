@@ -19,6 +19,28 @@
     --border: #e4e1da;
     --border-soft: #eeebe4;
 
+    --footer-bg: #0f0f0f;
+    --footer-text: #f7f6f3;
+    --footer-muted: #a0a0a0;
+
+    /* Category tag colors (semantic per-category pills) */
+    --cat-food-bg: #fef2f2; --cat-food-text: #dc2626;
+    --cat-transport-bg: #fffbeb; --cat-transport-text: #d97706;
+    --cat-bills-bg: #eef2ff; --cat-bills-text: #4f46e5;
+    --cat-health-bg: #ecfdf5; --cat-health-text: #059669;
+    --cat-entertainment-bg: #fdf2f8; --cat-entertainment-text: #db2777;
+    --cat-shopping-bg: #f5f3ff; --cat-shopping-text: #7c3aed;
+    --cat-other-bg: #f3f4f6; --cat-other-text: #6b7280;
+
+    /* Category bar fills */
+    --bar-food: #dc2626;
+    --bar-transport: #d97706;
+    --bar-bills: #4f46e5;
+    --bar-health: #059669;
+    --bar-entertainment: #db2777;
+    --bar-shopping: #7c3aed;
+    --bar-other: #6b7280;
+
     --font-display: 'DM Serif Display', Georgia, serif;
     --font-body: 'DM Sans', system-ui, sans-serif;
 
@@ -28,6 +50,167 @@
     --radius-sm: 6px;
     --radius-md: 12px;
     --radius-lg: 20px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Theme Switch — Dark mode overrides                                   */
+/* ------------------------------------------------------------------ */
+
+/* Dark theme, active while the dark radio is checked */
+body:has(#theme-dark:checked) {
+    --ink: #F3F5F2;
+    --ink-soft: #DFE3DE;
+    --ink-muted: #8C948E;
+    --ink-faint: #5B5F58;
+    --paper: #0B0F14;
+    --paper-warm: #1A2029;
+    --paper-card: #12171D;
+    --accent: #1F7A4D;
+    --accent-light: #163524;
+    --accent-2: #E0A94E;
+    --accent-2-light: #3A2E18;
+    --danger: #E07A6B;
+    --danger-light: #3A1D1A;
+    --border: #232A33;
+    --border-soft: #1E242C;
+
+    --footer-bg: #0B0F14;
+    --footer-text: #F3F5F2;
+    --footer-muted: #8C948E;
+
+    /* Category tag colors (dark variant) */
+    --cat-food-bg: #2a1a1a; --cat-food-text: #fca5a5;
+    --cat-transport-bg: #2a2415; --cat-transport-text: #fbbf24;
+    --cat-bills-bg: #1c1f2e; --cat-bills-text: #a5b4fc;
+    --cat-health-bg: #12241c; --cat-health-text: #6ee7b7;
+    --cat-entertainment-bg: #291a24; --cat-entertainment-text: #f9a8d4;
+    --cat-shopping-bg: #221a2e; --cat-shopping-text: #c4b5fd;
+    --cat-other-bg: #1f2420; --cat-other-text: #9ca3af;
+
+    /* Category bar fills (dark variant) */
+    --bar-food: #ef4444;
+    --bar-transport: #f59e0b;
+    --bar-bills: #6366f1;
+    --bar-health: #10b981;
+    --bar-entertainment: #ec4899;
+    --bar-shopping: #8b5cf6;
+    --bar-other: #6b7280;
+}
+
+/* System theme: only follow OS dark mode while "system" is checked */
+@media (prefers-color-scheme: dark) {
+    body:has(#theme-system:checked) {
+        --ink: #F3F5F2;
+        --ink-soft: #DFE3DE;
+        --ink-muted: #8C948E;
+        --ink-faint: #5B5F58;
+        --paper: #0B0F14;
+        --paper-warm: #1A2029;
+        --paper-card: #12171D;
+        --accent: #1F7A4D;
+        --accent-light: #163524;
+        --accent-2: #E0A94E;
+        --accent-2-light: #3A2E18;
+        --danger: #E07A6B;
+        --danger-light: #3A1D1A;
+        --border: #232A33;
+        --border-soft: #1E242C;
+
+        --footer-bg: #0B0F14;
+        --footer-text: #F3F5F2;
+        --footer-muted: #8C948E;
+
+        /* Category tag colors (dark variant) */
+        --cat-food-bg: #2a1a1a; --cat-food-text: #fca5a5;
+        --cat-transport-bg: #2a2415; --cat-transport-text: #fbbf24;
+        --cat-bills-bg: #1c1f2e; --cat-bills-text: #a5b4fc;
+        --cat-health-bg: #12241c; --cat-health-text: #6ee7b7;
+        --cat-entertainment-bg: #291a24; --cat-entertainment-text: #f9a8d4;
+        --cat-shopping-bg: #221a2e; --cat-shopping-text: #c4b5fd;
+        --cat-other-bg: #1f2420; --cat-other-text: #9ca3af;
+
+        /* Category bar fills (dark variant) */
+        --bar-food: #ef4444;
+        --bar-transport: #f59e0b;
+        --bar-bills: #6366f1;
+        --bar-health: #10b981;
+        --bar-entertainment: #ec4899;
+        --bar-shopping: #8b5cf6;
+        --bar-other: #6b7280;
+    }
+}
+
+/* --- switch component itself --- */
+
+.theme-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.theme-label {
+    display: block;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--ink-muted);
+    margin-bottom: 8px;
+}
+
+/* In the top navbar, keep the label inline with the switch */
+.navbar .theme-field {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.navbar .theme-label {
+    margin-bottom: 0;
+    white-space: nowrap;
+}
+
+.theme-switch {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 999px;
+    background: var(--surface-alt, var(--paper-warm));
+    width: 132px;
+}
+
+.theme-switch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.theme-switch label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border-radius: 999px;
+    cursor: pointer;
+    color: var(--ink-muted);
+    border: 1px solid transparent;
+    transition: background .15s ease, color .15s ease;
+}
+
+.theme-switch label:hover {
+    background: var(--paper-card);
+    color: var(--ink);
+}
+
+.theme-switch input:checked + label {
+    background: var(--paper-card);
+    border-color: var(--border);
+    color: var(--accent);
+}
+
+.theme-switch input:focus-visible + label {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
 }
 
 /* ------------------------------------------------------------------ */
@@ -128,8 +311,8 @@ a { color: inherit; text-decoration: none; }
     width: 32px;
     height: 32px;
     border-radius: 50%;
-    background: #1B4332;
-    color: #ffffff;
+    background: var(--accent);
+    color: var(--paper);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -476,7 +659,7 @@ a { color: inherit; text-decoration: none; }
 .auth-error {
     background: var(--danger-light);
     color: var(--danger);
-    border: 1px solid #f5c6c2;
+    border: 1px solid var(--danger-light);
     border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     font-size: 0.875rem;
@@ -660,8 +843,8 @@ a { color: inherit; text-decoration: none; }
 /* ------------------------------------------------------------------ */
 
 .footer {
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--footer-bg);
+    color: var(--footer-text);
     padding: 3rem 2rem 2.5rem;
     text-align: center;
 }
@@ -689,12 +872,12 @@ a { color: inherit; text-decoration: none; }
 .footer-name {
     font-weight: 600;
     font-size: 1.1rem;
-    color: var(--paper);
+    color: var(--footer-text);
 }
 
 .footer-tagline {
     font-size: 0.85rem;
-    color: var(--ink-faint);
+    color: var(--footer-muted);
     margin-top: -0.25rem;
 }
 
@@ -706,7 +889,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .footer-legal a {
-    color: var(--ink-faint);
+    color: var(--footer-muted);
     transition: color 0.2s;
 }
 
@@ -715,13 +898,13 @@ a { color: inherit; text-decoration: none; }
 }
 
 .footer-legal-sep {
-    color: var(--ink-muted);
+    color: var(--footer-muted);
     font-size: 0.7rem;
 }
 
 .footer-copy {
     font-size: 0.75rem;
-    color: var(--ink-muted);
+    color: var(--footer-muted);
     margin-top: 0.25rem;
 }
 
