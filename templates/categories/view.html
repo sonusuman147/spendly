@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ category.name }} — Spendly{% endblock %}
+
+{% block page_title %}{{ category.name }}{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('categories') }}" class="app-breadcrumb-link">Categories</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">{{ category.name }}</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/categories.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="cat-view-section">
+
+    <div class="cat-view-header">
+        <div class="cat-view-title-group">
+            <span class="cat-swatch cat-view-swatch" style="--cat-color: {{ category.color }}; --cat-color-soft: {{ category.color }}22;">
+                <i data-lucide="{{ category.icon }}" class="cat-swatch-icon"></i>
+            </span>
+            <div>
+                <h1 class="cat-view-title">{{ category.name }}</h1>
+                <p class="cat-view-subtitle">{{ category.description or "No description" }}</p>
+            </div>
+        </div>
+        <div class="cat-view-actions">
+            <a href="{{ url_for('edit_category', category_id=category.id) }}" class="btn-export">
+                <i data-lucide="pencil" width="16" height="16"></i>
+                Edit
+            </a>
+            <a href="{{ url_for('delete_category_view', category_id=category.id) }}" class="btn-export cat-btn-danger">
+                <i data-lucide="trash-2" width="16" height="16"></i>
+                Delete
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="categories-stats cat-view-stats">
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="receipt" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Count</span>
+            </div>
+            <div class="stat-label">Transactions</div>
+            <div class="stat-value">{{ category.transaction_count }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="wallet" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Spent</span>
+            </div>
+            <div class="stat-label">Total Spent</div>
+            <div class="stat-value">₹{{ "%.2f"|format(category.total_spent) }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="calculator" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Avg</span>
+            </div>
+            <div class="stat-label">Average Expense</div>
+            <div class="stat-value">₹{{ "%.2f"|format(category.avg_expense) }}</div>
+        </div>
+    </div>
+
+    <!-- Detail card -->
+    <div class="cat-view-card">
+        <div class="dashboard-card-header">
+            <div class="dashboard-card-heading">
+                <i data-lucide="info" class="dashboard-card-icon"></i>
+                <h2 class="dashboard-card-title">Category Details</h2>
+            </div>
+        </div>
+        <div class="cat-view-details">
+            <div class="cat-view-detail-row">
+                <span class="cat-view-detail-label">Name</span>
+                <span class="cat-view-detail-value">{{ category.name }}</span>
+            </div>
+            <div class="cat-view-detail-row">
+                <span class="cat-view-detail-label">Icon</span>
+                <span class="cat-view-detail-value">{{ category.icon }}</span>
+            </div>
+            <div class="cat-view-detail-row">
+                <span class="cat-view-detail-label">Color</span>
+                <span class="cat-view-detail-value cat-view-color-value">
+                    <span class="cat-swatch cat-color-chip" style="--cat-color: {{ category.color }}; --cat-color-soft: {{ category.color }}22;">
+                        <i data-lucide="{{ category.icon }}" class="cat-swatch-icon"></i>
+                    </span>
+                    {{ category.color }}
+                </span>
+            </div>
+            <div class="cat-view-detail-row">
+                <span class="cat-view-detail-label">Created</span>
+                <span class="cat-view-detail-value">{{ category.created_at[:10] }}</span>
+            </div>
+            <div class="cat-view-detail-row">
+                <span class="cat-view-detail-label">Usage</span>
+                <span class="cat-view-detail-value">
+                    {% if category.transaction_count > 0 %}
+                    Used by {{ category.transaction_count }} transaction{{ 's' if category.transaction_count != 1 else '' }}
+                    {% else %}
+                    <span class="cat-unused-pill">Unused</span>
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+</section>
+
+{% endblock %}
+

@@ -40,6 +40,49 @@ SORT_OPTIONS = {
     "category-asc": "category ASC, date DESC",
 }
 
+# ------------------------------------------------------------------ #
+# Categories module constants                                        #
+# ------------------------------------------------------------------ #
+
+# Default categories seeded for every new user. Each entry is:
+# (name, description, lucide icon name, hex color)
+DEFAULT_CATEGORIES = [
+    ("Food", "Groceries, dining out and everyday meals", "utensils", "#dc2626"),
+    ("Transport", "Fuel, bus, cab and travel", "bus", "#d97706"),
+    ("Bills", "Electricity, water, internet and utilities", "receipt", "#4f46e5"),
+    ("Health", "Medicines, doctor visits and wellness", "heart-pulse", "#059669"),
+    ("Entertainment", "Movies, games and fun", "clapperboard", "#db2777"),
+    ("Shopping", "Clothes, electronics and retail", "shopping-bag", "#7c3aed"),
+    ("Other", "Miscellaneous spending", "circle-ellipsis", "#6b7280"),
+]
+
+# Lucide icon names offered by the category icon picker.
+CATEGORY_ICONS = [
+    "utensils", "car", "bus", "receipt", "heart-pulse", "clapperboard",
+    "shopping-bag", "circle-ellipsis", "home", "zap", "book-open",
+    "dumbbell", "plane", "gift", "piggy-bank", "credit-card",
+    "wifi", "droplets", "phone", "film", "coffee", "baby",
+]
+
+# Preset hex palette for category colors (maps to the existing --bar-* spending colors).
+CATEGORY_COLORS = [
+    "#dc2626", "#d97706", "#4f46e5", "#059669", "#db2777",
+    "#7c3aed", "#6b7280", "#1a472a", "#c17f24", "#2563eb",
+    "#0891b2", "#ea580c", "#16a34a", "#9333ea", "#e11d48",
+]
+
+# Whitelist of allowed sort keys for server-side category sorting.
+# "total_spent" / "transaction_count" are aliases computed in the SQL select.
+CATEGORY_SORT_OPTIONS = {
+    "name-asc": "c.name COLLATE NOCASE ASC, c.id ASC",
+    "name-desc": "c.name COLLATE NOCASE DESC, c.id DESC",
+    "spent-desc": "total_spent DESC, c.name COLLATE NOCASE ASC",
+    "spent-asc": "total_spent ASC, c.name COLLATE NOCASE ASC",
+    "count-desc": "transaction_count DESC, c.name COLLATE NOCASE ASC",
+    "created-desc": "c.created_at DESC, c.id DESC",
+    "created-asc": "c.created_at ASC, c.id ASC",
+}
+
 
 def get_db():
     """Open and return a connection to the SQLite database.
@@ -47,7 +90,7 @@ def get_db():
     Sets row_factory to sqlite3.Row for dictionary-like column access
     and enables foreign key enforcement on every connection.
     """
-    conn = sqlite3.connect(DATABASE_PATH)
+    conn = sqlite3.connect(DATABASE_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
@@ -94,6 +137,19 @@ def init_db():
             description TEXT,
             amount REAL,
             created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS categories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            name TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            icon TEXT NOT NULL DEFAULT 'tag',
+            color TEXT NOT NULL DEFAULT '#1a472a',
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (user_id, name)
         )
     """)
 
@@ -179,6 +235,16 @@ def seed_db():
         [
             (user_id, "added", i + 1, cat, desc, amt)
             for i, (uid, amt, cat, d, desc, pm) in enumerate(sample_expenses)
+        ],
+    )
+
+    # Seed the demo user's default category rows.
+    cursor.executemany(
+        "INSERT INTO categories (user_id, name, description, icon, color) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [
+            (user_id, name, desc, icon, color)
+            for name, desc, icon, color in DEFAULT_CATEGORIES
         ],
     )
 
@@ -671,6 +737,480 @@ def get_expenses_by_ids(user_id, ids):
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
+
+
+# ================================================================== #
+# Categories module — DB layer                                       #
+# ================================================================== #
+
+def ensure_default_categories(user_id):
+    """Seed the default categories for a user if they have none.
+
+    Also creates rows for any expense category names that do not yet have a
+    category row (migration safety for data created before the categories
+    table existed). Idempotent — never duplicates existing rows.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Distinct category names actually used by this user's expenses.
+    cursor.execute(
+        "SELECT DISTINCT category FROM expenses WHERE user_id = ?",
+        (user_id,),
+    )
+    used_names = {row["category"] for row in cursor.fetchall()}
+
+    # Existing category names for this user.
+    cursor.execute(
+        "SELECT name FROM categories WHERE user_id = ?",
+        (user_id,),
+    )
+    existing = {row["name"] for row in cursor.fetchall()}
+
+    # Insert defaults + any used-but-missing names.
+    inserts = []
+    for name, desc, icon, color in DEFAULT_CATEGORIES:
+        if name not in existing:
+            inserts.append((user_id, name, desc, icon, color))
+            existing.add(name)
+    for name in used_names:
+        if name not in existing and name not in CATEGORIES:
+            inserts.append((user_id, name, "", "tag", "#6b7280"))
+            existing.add(name)
+
+    cursor.executemany(
+        "INSERT INTO categories (user_id, name, description, icon, color) "
+        "VALUES (?, ?, ?, ?, ?)",
+        inserts,
+    )
+    conn.commit()
+    conn.close()
+
+
+def backfill_categories():
+    """Ensure every existing user has default category rows.
+
+    Called once at app startup after init_db(). Iterates all users and calls
+    ensure_default_categories() for each.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users")
+    user_ids = [row["id"] for row in cursor.fetchall()]
+    conn.close()
+
+    for uid in user_ids:
+        ensure_default_categories(uid)
+
+
+def get_user_categories(user_id):
+    """Return all category rows for a user (no usage stats), ordered by name.
+
+    Used for dropdowns (expense form, transactions filter, merge selects).
+    Returns a list of dicts with id, name, description, icon, color.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, name, description, icon, color, created_at "
+        "FROM categories WHERE user_id = ? "
+        "ORDER BY name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def create_category(user_id, name, description, icon, color):
+    """Create a new category for a user and return its id.
+
+    Raises sqlite3.IntegrityError if the name already exists for this user
+    (case-insensitive uniqueness enforced via a case-insensitive EXISTS check
+    before insert). Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO categories (user_id, name, description, icon, color) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, name, description, icon, color),
+        )
+        cat_id = cursor.lastrowid
+        conn.commit()
+        return cat_id
+    finally:
+        conn.close()
+
+
+def get_category_by_id(category_id, user_id):
+    """Return a single category with usage stats, or None if not found/owned.
+
+    The returned dict includes transaction_count, total_spent and
+    avg_expense computed from the user's expenses table. Uses parameterized
+    queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT c.id, c.user_id, c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.id = ? AND c.user_id = ? "
+        "GROUP BY c.id",
+        (category_id, user_id),
+    )
+    cat = cursor.fetchone()
+    conn.close()
+    if cat:
+        cat = dict(cat)
+        cat["total_spent"] = round(cat["total_spent"], 2)
+        cat["avg_expense"] = round(cat["avg_expense"], 2)
+        return cat
+    return None
+
+
+def update_category(category_id, user_id, name, description, icon, color):
+    """Update a category row WHERE id = ? AND user_id = ?.
+
+    If the name changes, existing expenses using the old name are renamed to
+    the new name so historical data stays coherent. Returns True if a row was
+    updated. Raises sqlite3.IntegrityError on duplicate names.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT name FROM categories WHERE id = ? AND user_id = ?",
+            (category_id, user_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return False
+
+        old_name = row["name"]
+        cursor.execute(
+            "UPDATE categories SET name = ?, description = ?, icon = ?, color = ? "
+            "WHERE id = ? AND user_id = ?",
+            (name, description, icon, color, category_id, user_id),
+        )
+        affected = cursor.rowcount
+
+        # Keep expenses in sync with a renamed category.
+        if old_name != name:
+            cursor.execute(
+                "UPDATE expenses SET category = ? WHERE user_id = ? AND category = ?",
+                (name, user_id, old_name),
+            )
+            # Also keep the activity log coherent.
+            cursor.execute(
+                "UPDATE activities SET category = ? WHERE user_id = ? AND category = ?",
+                (name, user_id, old_name),
+            )
+
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
+
+
+def delete_category(category_id, user_id, reassign=True):
+    """Delete a category row WHERE id = ? AND user_id = ?.
+
+    When reassign is True (default), any expenses using this category are first
+    reassigned to "Other" so no orphaned expense categories remain. Returns
+    True if a row was deleted, False if no matching row found. Uses
+    parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name FROM categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        conn.close()
+        return False
+
+    name = row["name"]
+    if reassign:
+        cursor.execute(
+            "UPDATE expenses SET category = 'Other' "
+            "WHERE user_id = ? AND category = ?",
+            (user_id, name),
+        )
+        cursor.execute(
+            "UPDATE activities SET category = 'Other' "
+            "WHERE user_id = ? AND category = ?",
+            (user_id, name),
+        )
+
+    cursor.execute(
+        "DELETE FROM categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def get_categories(user_id, search="", sort="name-asc", page=1, per_page=8):
+    """Fetch paginated categories with usage statistics for a user.
+
+    Returns a dict with items, total, pages, page, per_page, has_prev,
+    has_next. Each item includes transaction_count, total_spent and
+    avg_expense. `search` matches name/description case-insensitively. `sort`
+    is validated against CATEGORY_SORT_OPTIONS. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    sort_sql = CATEGORY_SORT_OPTIONS.get(sort, CATEGORY_SORT_OPTIONS["name-asc"])
+
+    clauses = ["c.user_id = ?"]
+    params = [user_id]
+    if search:
+        clauses.append("(c.name LIKE ? OR c.description LIKE ?)")
+        like = f"%{search}%"
+        params.append(like)
+        params.append(like)
+    where = "WHERE " + " AND ".join(clauses)
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT COUNT(DISTINCT c.id) AS total "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        f"{where}",
+        tuple(params),
+    )
+    total = cursor.fetchone()["total"]
+
+    if per_page is None or per_page <= 0:
+        per_page = total if total > 0 else 1
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page), pages))
+
+    cursor.execute(
+        "SELECT c.id, c.user_id, c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        f"{where} "
+        "GROUP BY c.id "
+        f"ORDER BY {sort_sql} "
+        "LIMIT ? OFFSET ?",
+        tuple(params) + (per_page, (page - 1) * per_page),
+    )
+    items = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item["total_spent"] = round(item["total_spent"], 2)
+        item["avg_expense"] = round(item["avg_expense"], 2)
+        items.append(item)
+    conn.close()
+
+    return {
+        "items": items,
+        "total": total,
+        "pages": pages,
+        "page": page,
+        "per_page": per_page,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+def get_category_stats(user_id):
+    """Compute the aggregate statistics for the Categories dashboard.
+
+    Returns a dict with:
+      - total_categories: int
+      - most_used_category: str or None (by transaction count)
+      - highest_spending_category: str or None (by total spent)
+      - unused_categories: int (categories with zero transactions)
+      - total_spent: float (sum of all expenses)
+      - distribution: list of {name, color, total, count, pct} ordered by
+        total descending (only categories with expenses)
+      - conic_gradient: str — CSS conic-gradient() value built from the
+        distribution colors for the donut chart
+      - ranking: list of {id, name, icon, color, total_spent, pct} ordered by
+        total spent descending (all categories, capped at 8)
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # All categories with usage stats.
+    cursor.execute(
+        "SELECT c.id, c.name, c.icon, c.color, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.user_id = ? "
+        "GROUP BY c.id "
+        "ORDER BY total_spent DESC, c.name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    cats = [dict(r) for r in cursor.fetchall()]
+
+    # Grand total spent (all expenses).
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_spent, "
+        "COUNT(*) AS expense_count FROM expenses WHERE user_id = ?",
+        (user_id,),
+    )
+    grand = dict(cursor.fetchone())
+    conn.close()
+
+    total_categories = len(cats)
+    used = [c for c in cats if c["transaction_count"] > 0]
+    unused_count = total_categories - len(used)
+
+    most_used = max(cats, key=lambda c: c["transaction_count"]) if cats and cats[0]["transaction_count"] > 0 else None
+    if most_used is None:
+        # No category has transactions; fall back to None.
+        most_used = None
+    else:
+        most_used = most_used["name"]
+
+    highest = used[0]["name"] if used else None
+
+    grand_total = grand["total_spent"] or 0.0
+
+    distribution = []
+    for c in used:
+        pct = (c["total_spent"] / grand_total * 100) if grand_total > 0 else 0.0
+        distribution.append({
+            "name": c["name"],
+            "color": c["color"],
+            "total": round(c["total_spent"], 2),
+            "count": c["transaction_count"],
+            "pct": round(pct, 1),
+        })
+
+    # Build a CSS conic-gradient string for the donut chart.
+    if distribution:
+        segments = []
+        cumulative = 0.0
+        for d in distribution:
+            start = cumulative
+            end = cumulative + d["pct"]
+            cumulative = end
+            segments.append(f"{d['color']} {start:.1f}% {end:.1f}%")
+        # Ensure the last segment reaches 100%.
+        if segments:
+            segments[-1] = segments[-1].rsplit(" ", 1)[0] + f" 100%"
+        conic_gradient = f"conic-gradient({', '.join(segments)})"
+    else:
+        conic_gradient = "conic-gradient(var(--border-soft) 0% 100%)"
+
+    ranking = []
+    for c in cats[:8]:
+        pct = (c["total_spent"] / grand_total * 100) if grand_total > 0 else 0.0
+        ranking.append({
+            "id": c["id"],
+            "name": c["name"],
+            "icon": c["icon"],
+            "color": c["color"],
+            "total_spent": round(c["total_spent"], 2),
+            "transaction_count": c["transaction_count"],
+            "pct": round(pct, 1),
+        })
+
+    return {
+        "total_categories": total_categories,
+        "most_used_category": most_used,
+        "highest_spending_category": highest,
+        "unused_categories": unused_count,
+        "total_spent": round(grand_total, 2),
+        "distribution": distribution,
+        "conic_gradient": conic_gradient,
+        "ranking": ranking,
+    }
+
+
+def get_categories_export(user_id):
+    """Return flat rows for CSV export: category + usage stats.
+
+    Returns a list of dicts with name, description, icon, color, created_at,
+    transaction_count, total_spent, avg_expense. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.user_id = ? "
+        "GROUP BY c.id "
+        "ORDER BY c.name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    rows = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item["total_spent"] = round(item["total_spent"], 2)
+        item["avg_expense"] = round(item["avg_expense"], 2)
+        rows.append(item)
+    conn.close()
+    return rows
+
+
+def merge_categories(user_id, source_id, target_id):
+    """Merge source category into target category.
+
+    All expenses (and activity entries) using the source category name are
+    reassigned to the target category name, then the source category row is
+    deleted. Returns True on success, False if either id is invalid or the
+    source == target. Uses parameterized queries — safe from SQL injection.
+    """
+    if source_id == target_id:
+        return False
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, name FROM categories WHERE id IN (?, ?) AND user_id = ?",
+        (source_id, target_id, user_id),
+    )
+    rows = {r["id"]: r["name"] for r in cursor.fetchall()}
+    if source_id not in rows or target_id not in rows:
+        conn.close()
+        return False
+
+    source_name = rows[source_id]
+    target_name = rows[target_id]
+
+    cursor.execute(
+        "UPDATE expenses SET category = ? WHERE user_id = ? AND category = ?",
+        (target_name, user_id, source_name),
+    )
+    cursor.execute(
+        "UPDATE activities SET category = ? WHERE user_id = ? AND category = ?",
+        (target_name, user_id, source_name),
+    )
+    cursor.execute(
+        "DELETE FROM categories WHERE id = ? AND user_id = ?",
+        (source_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
 
 
 def delete_expenses_bulk(user_id, ids):

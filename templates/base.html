@@ -79,10 +79,9 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                        <a href="{{ url_for('categories') }}" class="sidebar-link {% if request.endpoint in ['categories', 'add_category', 'view_category', 'edit_category', 'delete_category_view', 'merge_categories_view', 'categories_export', 'categories_analytics'] %}active{% endif %}">
                             <i data-lucide="tags" class="sidebar-link-icon"></i>
                             <span class="sidebar-link-text">Categories</span>
-                            <span class="sidebar-badge">Soon</span>
                         </a>
                     </li>
                     <li>

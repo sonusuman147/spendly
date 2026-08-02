@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Category Analytics — Spendly{% endblock %}
+
+{% block page_title %}Category Analytics{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('categories') }}" class="app-breadcrumb-link">Categories</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Analytics</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/categories.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="analytics-section">
+
+    <div class="categories-header">
+        <div class="categories-header-copy">
+            <h1 class="categories-title">Category Analytics</h1>
+            <p class="categories-subtitle">Understand where your money goes by category.</p>
+        </div>
+        <div class="categories-header-actions">
+            <a href="{{ url_for('categories') }}" class="btn-export">
+                <i data-lucide="arrow-left" width="16" height="16"></i>
+                Back to Categories
+            </a>
+        </div>
+    </div>
+
+    <!-- Summary -->
+    <div class="categories-stats">
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="tags" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Total</span>
+            </div>
+            <div class="stat-label">Total Categories</div>
+            <div class="stat-value">{{ stats.total_categories }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="zap" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Frequent</span>
+            </div>
+            <div class="stat-label">Most Used</div>
+            <div class="stat-value stat-value-sm">{{ stats.most_used_category or "—" }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="trending-up" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Top</span>
+            </div>
+            <div class="stat-label">Highest Spending</div>
+            <div class="stat-value stat-value-sm">{{ stats.highest_spending_category or "—" }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="circle-dashed" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Idle</span>
+            </div>
+            <div class="stat-label">Unused Categories</div>
+            <div class="stat-value">{{ stats.unused_categories }}</div>
+        </div>
+    </div>
+
+    <div class="categories-layout">
+
+        <!-- Donut + legend -->
+        <div class="categories-main-col">
+            <div class="dashboard-card cat-donut-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Spending Distribution</h2>
+                    </div>
+                    <span class="activity-chip">Total ₹{{ "%.2f"|format(stats.total_spent) }}</span>
+                </div>
+                <div class="dashboard-card-body cat-analytics-body">
+                    <div class="cat-donut-wrap cat-donut-wrap-lg" style="--donut: {{ stats.conic_gradient }}">
+                        <div class="cat-donut">
+                            <div class="cat-donut-center">
+                                <span class="cat-donut-total">₹{{ "%.2f"|format(stats.total_spent) }}</span>
+                                <span class="cat-donut-label">Total spent</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if stats.distribution %}
+                    <ul class="cat-legend cat-legend-lg">
+                        {% for item in stats.distribution %}
+                        <li class="cat-legend-item">
+                            <span class="cat-legend-dot" style="background: {{ item.color }};"></span>
+                            <span class="cat-legend-name">{{ item.name }}</span>
+                            <span class="cat-legend-pct">{{ item.pct }}%</span>
+                            <span class="cat-legend-amount">₹{{ "%.2f"|format(item.total) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="cat-empty-text cat-no-data">No spending data yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Ranking sidebar -->
+        <aside class="categories-side-col">
+            <div class="dashboard-card cat-ranking-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="award" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Top Categories</h2>
+                    </div>
+                    <span class="activity-chip">Ranking</span>
+                </div>
+                <div class="dashboard-card-body">
+                    {% if stats.ranking %}
+                    <ol class="cat-ranking">
+                        {% for rank in stats.ranking %}
+                        <li class="cat-ranking-item">
+                            <span class="cat-ranking-pos">{{ loop.index }}</span>
+                            <span class="cat-ranking-swatch" style="--cat-color: {{ rank.color }}; --cat-color-soft: {{ rank.color }}22;">
+                                <i data-lucide="{{ rank.icon }}" class="cat-swatch-icon"></i>
+                            </span>
+                            <div class="cat-ranking-copy">
+                                <span class="cat-ranking-name">{{ rank.name }}</span>
+                                <div class="cat-ranking-bar">
+                                    <span class="cat-ranking-bar-fill" style="width: {{ rank.pct }}%; background: {{ rank.color }};"></span>
+                                </div>
+                            </div>
+                            <span class="cat-ranking-amount">₹{{ "%.2f"|format(rank.total_spent) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="cat-empty-text cat-no-data">No categories with spending yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Full breakdown table -->
+    <div class="cat-table-card analytics-table-card">
+        <div class="cat-table-scroll">
+            <table class="cat-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Created</th>
+                        <th class="amount-col">Transactions</th>
+                        <th class="amount-col">Total Spent</th>
+                        <th class="amount-col">Average</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in categories %}
+                    <tr>
+                        <td>
+                            <div class="cat-cell">
+                                <span class="cat-swatch" style="--cat-color: {{ cat.color }}; --cat-color-soft: {{ cat.color }}22;">
+                                    <i data-lucide="{{ cat.icon }}" class="cat-swatch-icon"></i>
+                                </span>
+                                <div class="cat-cell-copy">
+                                    <span class="cat-name">{{ cat.name }}</span>
+                                    <span class="cat-icon-name">{{ cat.description or "" }}</span>
+                                </div>
+                            </div>
+                        </td>
+                        <td><span class="cat-date">{{ cat.created_at[:10] }}</span></td>
+                        <td class="amount-col"><span class="cat-count-badge">{{ cat.transaction_count }}</span></td>
+                        <td class="amount-col">₹{{ "%.2f"|format(cat.total_spent) }}</td>
+                        <td class="amount-col">₹{{ "%.2f"|format(cat.avg_expense) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5">
+                            <div class="cat-empty">
+                                <div class="cat-empty-icon"><i data-lucide="bar-chart-3" width="48" height="48"></i></div>
+                                <h2 class="cat-empty-title">No categories yet</h2>
+                                <p class="cat-empty-text">Create categories to see analytics here.</p>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</section>
+
+{% endblock %}
+

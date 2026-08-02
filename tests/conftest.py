@@ -28,7 +28,9 @@ db_module.DATABASE_PATH = _tmp_path
 def app():
     """Create a Flask app instance configured for testing.
 
-    Initialises the database and seeds demo data for each test session.
+    Drops and recreates all tables, then seeds fresh demo data so every
+    test starts from an identical, isolated database state. This prevents
+    tests from mutating shared rows and invalidating later assertions.
     """
     from app import app as flask_app
 
@@ -37,9 +39,26 @@ def app():
         SECRET_KEY="test-secret-key",
     )
 
-    # Initialise and seed the test database
+    # Reset the database to a pristine, freshly-seeded state per test.
+    # init_db() runs first so the schema always exists (the previous test
+    # may have unlinked the temp file). Row-level DELETE is used instead of
+    # DROP TABLE because DROP requires an exclusive lock and can fail with
+    # "database is locked" if a previous test left a connection open.
     with flask_app.app_context():
         db_module.init_db()
+
+        conn = db_module.get_db()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("DELETE FROM activities")
+        conn.execute("DELETE FROM expenses")
+        conn.execute("DELETE FROM categories")
+        conn.execute("DELETE FROM users")
+        # Reset AUTOINCREMENT counters so the fresh seed assigns id=1 to the
+        # demo user, keeping the `user_id == 1` convention used by the tests.
+        conn.execute("DELETE FROM sqlite_sequence")
+        conn.commit()
+        conn.close()
+
         db_module.seed_db()
 
     yield flask_app

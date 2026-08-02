@@ -1,0 +1,335 @@
+{% extends "base.html" %}
+
+{% block title %}Categories — Spendly{% endblock %}
+
+{% block page_title %}Categories{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Categories</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/categories.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="categories-section">
+
+    <!-- ============ Page Header ============ -->
+    <div class="categories-header">
+        <div class="categories-header-copy">
+            <h1 class="categories-title">Categories</h1>
+            <p class="categories-subtitle">Organise your spending with categories, icons and colors.</p>
+        </div>
+        <div class="categories-header-actions">
+            <a href="{{ url_for('add_category') }}" class="btn-add">
+                <i data-lucide="plus" width="18" height="18"></i>
+                Add Category
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============ Summary Cards ============ -->
+    <div class="categories-stats">
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="tags" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Total</span>
+            </div>
+            <div class="stat-label">Total Categories</div>
+            <div class="stat-value">{{ stats.total_categories }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="zap" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Frequent</span>
+            </div>
+            <div class="stat-label">Most Used Category</div>
+            <div class="stat-value stat-value-sm">{{ stats.most_used_category or "—" }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="trending-up" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Top</span>
+            </div>
+            <div class="stat-label">Highest Spending Category</div>
+            <div class="stat-value stat-value-sm">{{ stats.highest_spending_category or "—" }}</div>
+        </div>
+        <div class="stat-card cat-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="circle-dashed" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Idle</span>
+            </div>
+            <div class="stat-label">Unused Categories</div>
+            <div class="stat-value">{{ stats.unused_categories }}</div>
+        </div>
+    </div>
+
+    <!-- ============ Layout ============ -->
+    <div class="categories-layout">
+
+        <!-- Left column (main) -->
+        <div class="categories-main-col">
+
+            <!-- ============ Filter / Sort Bar ============ -->
+            <form method="GET" action="{{ url_for('categories') }}" class="cat-filter-bar" id="categoryFilterForm">
+                <div class="filter-row filter-row-search">
+                    <div class="filter-search-wrap">
+                        <i data-lucide="search" class="filter-search-icon"></i>
+                        <input type="search" name="search" id="filterSearch" class="filter-search-input"
+                               placeholder="Search categories by name or description…" aria-label="Search categories"
+                               value="{{ filters.search }}">
+                    </div>
+                </div>
+
+                <div class="filter-row filter-row-footer">
+                    <div class="cat-filter-controls">
+                        <label class="txn-filter-field">
+                            <span class="txn-filter-label">Sort by</span>
+                            <select name="sort" id="filterSort" class="filter-select">
+                                <option value="name-asc" {% if filters.sort == 'name-asc' %}selected{% endif %}>Name (A → Z)</option>
+                                <option value="name-desc" {% if filters.sort == 'name-desc' %}selected{% endif %}>Name (Z → A)</option>
+                                <option value="spent-desc" {% if filters.sort == 'spent-desc' %}selected{% endif %}>Total spent (high → low)</option>
+                                <option value="spent-asc" {% if filters.sort == 'spent-asc' %}selected{% endif %}>Total spent (low → high)</option>
+                                <option value="count-desc" {% if filters.sort == 'count-desc' %}selected{% endif %}>Most transactions</option>
+                                <option value="created-desc" {% if filters.sort == 'created-desc' %}selected{% endif %}>Newest first</option>
+                                <option value="created-asc" {% if filters.sort == 'created-asc' %}selected{% endif %}>Oldest first</option>
+                            </select>
+                        </label>
+                        <label class="txn-filter-field">
+                            <span class="txn-filter-label">Show</span>
+                            <select name="per_page" id="filterPerPage" class="filter-select">
+                                <option value="8" {% if per_page == 8 %}selected{% endif %}>8 per page</option>
+                                <option value="12" {% if per_page == 12 %}selected{% endif %}>12 per page</option>
+                                <option value="20" {% if per_page == 20 %}selected{% endif %}>20 per page</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="cat-filter-actions">
+                        <span class="filter-result-count">Showing {{ pagination.total }} categor{{ 'y' if pagination.total == 1 else 'ies' }}</span>
+                        <button type="button" class="filter-reset-btn" id="filterReset">
+                            <i data-lucide="rotate-ccw" width="14" height="14"></i>
+                            Reset
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- ============ Categories Table ============ -->
+            <div class="cat-table-card">
+                <div class="cat-table-scroll">
+                    <table class="cat-table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Description</th>
+                                <th class="amount-col">Transactions</th>
+                                <th class="amount-col">Total Spent</th>
+                                <th class="amount-col">Average</th>
+                                <th>Created</th>
+                                <th class="actions-col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cat in categories %}
+                            <tr>
+                                <td>
+                                    <div class="cat-cell">
+                                        <span class="cat-swatch" style="--cat-color: {{ cat.color }}; --cat-color-soft: {{ cat.color }}22;">
+                                            <i data-lucide="{{ cat.icon }}" class="cat-swatch-icon"></i>
+                                        </span>
+                                        <div class="cat-cell-copy">
+                                            <span class="cat-name"><a href="{{ url_for('view_category', category_id=cat.id) }}">{{ cat.name }}</a></span>
+                                            <span class="cat-icon-name">{{ cat.icon }}</span>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td><span class="cat-desc{{ '' if cat.description else ' cat-desc-empty' }}">{{ cat.description or 'No description' }}</span></td>
+                                <td class="amount-col">
+                                    <span class="cat-count-badge">{{ cat.transaction_count }}</span>
+                                </td>
+                                <td class="amount-col">₹{{ "%.2f"|format(cat.total_spent) }}</td>
+                                <td class="amount-col">₹{{ "%.2f"|format(cat.avg_expense) }}</td>
+                                <td><span class="cat-date">{{ cat.created_at[:10] }}</span></td>
+                                <td class="actions-col">
+                                    <span class="cat-actions">
+                                        <a href="{{ url_for('view_category', category_id=cat.id) }}" class="cat-icon-btn" title="View" aria-label="View category">
+                                            <i data-lucide="eye" width="15" height="15"></i>
+                                        </a>
+                                        <a href="{{ url_for('edit_category', category_id=cat.id) }}" class="cat-icon-btn" title="Edit" aria-label="Edit category">
+                                            <i data-lucide="pencil" width="15" height="15"></i>
+                                        </a>
+                                        <a href="{{ url_for('delete_category_view', category_id=cat.id) }}" class="cat-icon-btn cat-icon-btn-danger" title="Delete" aria-label="Delete category">
+                                            <i data-lucide="trash-2" width="15" height="15"></i>
+                                        </a>
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="7">
+                                    <div class="cat-empty">
+                                        <div class="cat-empty-icon"><i data-lucide="tags" width="48" height="48"></i></div>
+                                        {% if has_search %}
+                                        <h2 class="cat-empty-title">No matching categories</h2>
+                                        <p class="cat-empty-text">Try adjusting or clearing your search.</p>
+                                        <a href="{{ url_for('categories') }}" class="btn-ghost">Reset filters</a>
+                                        {% else %}
+                                        <h2 class="cat-empty-title">No categories yet</h2>
+                                        <p class="cat-empty-text">Create your first category to organise your spending.</p>
+                                        <a href="{{ url_for('add_category') }}" class="btn-primary">Add Category</a>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                {% if pagination.pages > 1 %}
+                <div class="txn-pagination">
+                    <a href="{{ url_for('categories', page=pagination.page - 1, **query_args) if pagination.has_prev else '#' }}"
+                       class="page-btn {% if not pagination.has_prev %}is-disabled{% endif %}" aria-label="Previous page">
+                        <i data-lucide="chevron-left" width="16" height="16"></i>
+                    </a>
+                    <span class="page-info">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+                    <a href="{{ url_for('categories', page=pagination.page + 1, **query_args) if pagination.has_next else '#' }}"
+                       class="page-btn {% if not pagination.has_next %}is-disabled{% endif %}" aria-label="Next page">
+                        <i data-lucide="chevron-right" width="16" height="16"></i>
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ============ Quick Actions ============ -->
+            <div class="cat-quick-actions">
+                <a href="{{ url_for('add_category') }}" class="cat-quick-card">
+                    <div class="cat-quick-icon"><i data-lucide="plus" width="20" height="20"></i></div>
+                    <div class="cat-quick-copy">
+                        <span class="cat-quick-title">Create Category</span>
+                        <span class="cat-quick-text">Add a new category with icon & color</span>
+                    </div>
+                </a>
+                <a href="{{ url_for('merge_categories_view') }}" class="cat-quick-card">
+                    <div class="cat-quick-icon"><i data-lucide="merge" width="20" height="20"></i></div>
+                    <div class="cat-quick-copy">
+                        <span class="cat-quick-title">Merge Categories</span>
+                        <span class="cat-quick-text">Combine two categories into one</span>
+                    </div>
+                </a>
+                <a href="{{ url_for('categories_export') }}" class="cat-quick-card">
+                    <div class="cat-quick-icon"><i data-lucide="download" width="20" height="20"></i></div>
+                    <div class="cat-quick-copy">
+                        <span class="cat-quick-title">Export Categories</span>
+                        <span class="cat-quick-text">Download your categories as CSV</span>
+                    </div>
+                </a>
+                <a href="{{ url_for('categories_analytics') }}" class="cat-quick-card">
+                    <div class="cat-quick-icon"><i data-lucide="bar-chart-3" width="20" height="20"></i></div>
+                    <div class="cat-quick-copy">
+                        <span class="cat-quick-title">Category Analytics</span>
+                        <span class="cat-quick-text">Insights into spending by category</span>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <!-- Right column: donut + ranking -->
+        <aside class="categories-side-col">
+
+            <!-- Donut distribution -->
+            <div class="dashboard-card cat-donut-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Spending Distribution</h2>
+                    </div>
+                    <span class="activity-chip">Total</span>
+                </div>
+                <div class="dashboard-card-body">
+                    <div class="cat-donut-wrap" style="--donut: {{ stats.conic_gradient }}">
+                        <div class="cat-donut">
+                            <div class="cat-donut-center">
+                                <span class="cat-donut-total">₹{{ "%.2f"|format(stats.total_spent) }}</span>
+                                <span class="cat-donut-label">Total spent</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if stats.distribution %}
+                    <ul class="cat-legend">
+                        {% for item in stats.distribution %}
+                        <li class="cat-legend-item">
+                            <span class="cat-legend-dot" style="background: {{ item.color }};"></span>
+                            <span class="cat-legend-name">{{ item.name }}</span>
+                            <span class="cat-legend-pct">{{ item.pct }}%</span>
+                            <span class="cat-legend-amount">₹{{ "%.2f"|format(item.total) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% else %}
+                    <p class="cat-empty-text cat-no-data">No spending data yet. Add expenses to see your distribution.</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Top categories ranking -->
+            <div class="dashboard-card cat-ranking-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="award" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Top Categories</h2>
+                    </div>
+                    <span class="activity-chip">Ranking</span>
+                </div>
+                <div class="dashboard-card-body">
+                    {% if stats.ranking %}
+                    <ol class="cat-ranking">
+                        {% for rank in stats.ranking %}
+                        <li class="cat-ranking-item">
+                            <span class="cat-ranking-pos">{{ loop.index }}</span>
+                            <span class="cat-ranking-swatch" style="--cat-color: {{ rank.color }}; --cat-color-soft: {{ rank.color }}22;">
+                                <i data-lucide="{{ rank.icon }}" class="cat-swatch-icon"></i>
+                            </span>
+                            <div class="cat-ranking-copy">
+                                <span class="cat-ranking-name">{{ rank.name }}</span>
+                                <div class="cat-ranking-bar">
+                                    <span class="cat-ranking-bar-fill" style="width: {{ rank.pct }}%; background: {{ rank.color }};"></span>
+                                </div>
+                            </div>
+                            <span class="cat-ranking-amount">₹{{ "%.2f"|format(rank.total_spent) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="cat-empty-text cat-no-data">No categories with spending yet.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+    </div>
+</section>
+
+{% endblock %}
+
