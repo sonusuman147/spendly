@@ -73,10 +73,9 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                        <a href="{{ url_for('transactions') }}" class="sidebar-link {% if request.endpoint == 'transactions' %}active{% endif %}">
                             <i data-lucide="arrow-left-right" class="sidebar-link-icon"></i>
                             <span class="sidebar-link-text">Transactions</span>
-                            <span class="sidebar-badge">Soon</span>
                         </a>
                     </li>
                     <li>

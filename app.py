@@ -10,13 +10,24 @@ from database.db import (
     get_db, init_db, seed_db, get_user_by_email, create_user,
     get_user_by_id, get_user_expenses_summary, get_user_by_google_id,
     link_google_account, CATEGORIES, SECURITY_QUESTIONS,
+    PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD, SORT_OPTIONS,
     update_user_profile, update_password, get_user_by_email_with_security,
     create_expense as db_create_expense,
     get_expenses_by_user as db_get_expenses_by_user,
     get_expense_by_id as db_get_expense_by_id,
     update_expense as db_update_expense,
     delete_expense as db_delete_expense,
+    get_transactions as db_get_transactions,
+    get_expenses_by_ids as db_get_expenses_by_ids,
+    delete_expenses_bulk as db_delete_expenses_bulk,
+    add_activity as db_add_activity,
+    get_recent_activity as db_get_recent_activity,
 )
+
+# Python standard library
+import csv
+import io
+from datetime import datetime as dt_datetime
 
 load_dotenv()
 
@@ -585,6 +596,288 @@ def list_expenses():
     return render_template("expenses/list.html", expenses=expenses)
 
 
+def _parse_transaction_filters():
+    """Parse and validate the GET filter parameters for the Transactions page.
+
+    Returns a dict with normalized, validated filter values:
+      - search: str (trimmed)
+      - category: str (must be in CATEGORIES, else "")
+      - date_from / date_to: str (validated YYYY-MM-DD, else "")
+      - amount_min / amount_max: float or None (invalid values are ignored)
+      - sort: str (must be in SORT_OPTIONS, else "date-desc")
+      - page: int (>= 1)
+    """
+    search = request.args.get("search", "").strip()
+    category = request.args.get("category", "").strip()
+    if category not in CATEGORIES:
+        category = ""
+
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+
+    # Validate date formats — invalid dates are treated as "no filter".
+    for key in ("date_from", "date_to"):
+        value = request.args.get(key, "").strip()
+        if value:
+            try:
+                dt_datetime.strptime(value, "%Y-%m-%d")
+            except ValueError:
+                if key == "date_from":
+                    date_from = ""
+                else:
+                    date_to = ""
+
+    # Validate amount range.
+    amount_min = None
+    amount_max = None
+    for key in ("amount_min", "amount_max"):
+        value = request.args.get(key, "").strip()
+        if value:
+            try:
+                parsed = float(value)
+                if parsed < 0:
+                    parsed = None
+            except ValueError:
+                parsed = None
+            if key == "amount_min":
+                amount_min = parsed
+            else:
+                amount_max = parsed
+
+    sort = request.args.get("sort", "date-desc")
+    if sort not in SORT_OPTIONS:
+        sort = "date-desc"
+
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+
+    return {
+        "search": search,
+        "category": category,
+        "date_from": date_from,
+        "date_to": date_to,
+        "amount_min": amount_min,
+        "amount_max": amount_max,
+        "sort": sort,
+        "page": page,
+    }
+
+
+def _transactions_query_args(filters):
+    """Build a dict of query params to preserve filter state across pagination.
+
+    Used to build pagination and action links that keep the current filters.
+    Excludes the page key so callers can override it.
+    """
+    args = {}
+    if filters["search"]:
+        args["search"] = filters["search"]
+    if filters["category"]:
+        args["category"] = filters["category"]
+    if filters["date_from"]:
+        args["date_from"] = filters["date_from"]
+    if filters["date_to"]:
+        args["date_to"] = filters["date_to"]
+    if filters["amount_min"] is not None:
+        args["amount_min"] = filters["amount_min"]
+    if filters["amount_max"] is not None:
+        args["amount_max"] = filters["amount_max"]
+    if filters["sort"] != "date-desc":
+        args["sort"] = filters["sort"]
+    return args
+
+
+@app.route("/transactions")
+def transactions():
+    """Render the Transactions ledger page with server-side processing.
+
+    Supports search, category filter, date range, amount range, sorting, and
+    pagination — all processed in the database via parameterized queries.
+    Summary statistics are computed from the *filtered* result set so the five
+    stat cards always reflect the currently visible ledger. Recent Activity is
+    served from the real activities table.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    filters = _parse_transaction_filters()
+    result = db_get_transactions(
+        session["user_id"],
+        search=filters["search"],
+        category=filters["category"],
+        date_from=filters["date_from"] or None,
+        date_to=filters["date_to"] or None,
+        amount_min=filters["amount_min"],
+        amount_max=filters["amount_max"],
+        sort=filters["sort"],
+        page=filters["page"],
+        per_page=8,
+    )
+
+    # Keep the Recent Activity panel coherent with the ledger: when a category
+    # filter is active, only activity for that category is shown.
+    activity = db_get_recent_activity(
+        session["user_id"],
+        limit=8,
+        category=filters["category"] or None,
+    )
+
+    has_active_filters = any([
+        filters["search"],
+        filters["category"],
+        filters["date_from"],
+        filters["date_to"],
+        filters["amount_min"] is not None,
+        filters["amount_max"] is not None,
+        filters["sort"] != "date-desc",
+    ])
+
+    return render_template(
+        "transactions.html",
+        transactions=result["items"],
+        categories=CATEGORIES,
+        payment_methods=PAYMENT_METHODS,
+        summary=result["summary"],
+        pagination={
+            "page": result["page"],
+            "pages": result["pages"],
+            "total": result["total"],
+            "has_prev": result["has_prev"],
+            "has_next": result["has_next"],
+        },
+        activity=activity,
+        filters=filters,
+        query_args=_transactions_query_args(filters),
+        per_page=result["per_page"],
+        has_active_filters=has_active_filters,
+    )
+
+
+@app.route("/transactions/export")
+def transactions_export():
+    """Export the filtered (or selected) transactions as a CSV file.
+
+    Accepts the same filter query params as GET /transactions. If `ids` is
+    provided, only those selected transaction ids are exported (ownership is
+    enforced server-side). Otherwise the full filtered set is exported.
+    Returns a text/csv attachment.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    filters = _parse_transaction_filters()
+
+    # If specific ids were selected, export only those (ownership-scoped).
+    ids_raw = request.args.get("ids", "")
+    if ids_raw:
+        try:
+            ids = [int(i) for i in ids_raw.split(",") if i.strip().isdigit()]
+        except (TypeError, ValueError):
+            ids = []
+        expenses = db_get_expenses_by_ids(user_id, ids)
+    else:
+        result = db_get_transactions(
+            user_id,
+            search=filters["search"],
+            category=filters["category"],
+            date_from=filters["date_from"] or None,
+            date_to=filters["date_to"] or None,
+            amount_min=filters["amount_min"],
+            amount_max=filters["amount_max"],
+            sort=filters["sort"],
+            page=1,
+            per_page=None,
+        )
+        expenses = result["items"]
+
+    # Build CSV in memory.
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Date", "Description", "Category", "Payment Method", "Amount"])
+
+    payment_label = {
+        "card": "Card",
+        "upi": "UPI",
+        "cash": "Cash",
+        "bank": "Bank",
+        "wallet": "Wallet",
+    }
+    for exp in expenses:
+        writer.writerow([
+            exp["date"],
+            exp["description"] or "",
+            exp["category"],
+            payment_label.get(exp.get("payment_method"), "Cash"),
+            f"{exp['amount']:.2f}",
+        ])
+
+    csv_data = output.getvalue()
+
+    from flask import Response
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spendly-transactions.csv"},
+    )
+
+
+@app.route("/transactions/bulk-delete", methods=["POST"])
+def transactions_bulk_delete():
+    """Delete multiple selected transactions (ownership enforced).
+
+    Accepts a list of expense ids via form field `expense_ids`. Only rows
+    owned by the logged-in user are deleted. Records a "deleted" activity
+    entry for each deleted transaction and redirects back to /transactions
+    preserving the active filters.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    expense_ids = request.form.getlist("expense_ids")
+
+    # Coerce to ints, dropping anything invalid.
+    ids = []
+    for raw in expense_ids:
+        try:
+            ids.append(int(raw))
+        except (TypeError, ValueError):
+            continue
+
+    if not ids:
+        flash("No transactions selected to delete.", "error")
+        return redirect(url_for("transactions"))
+
+    # Record activity for each transaction that actually belongs to the user.
+    owned = db_get_expenses_by_ids(user_id, ids)
+    for exp in owned:
+        db_add_activity(
+            user_id,
+            action="deleted",
+            expense_id=exp["id"],
+            category=exp["category"],
+            description=exp["description"],
+            amount=exp["amount"],
+        )
+
+    deleted = db_delete_expenses_bulk(user_id, ids)
+    if deleted == 0:
+        flash("No matching transactions found to delete.", "error")
+    else:
+        flash(f"{deleted} transaction(s) deleted successfully!", "success")
+
+    # Preserve the current filters when redirecting back.
+    filters = _parse_transaction_filters()
+    args = _transactions_query_args(filters)
+    return redirect(url_for("transactions", **args))
+
+
 @app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
     """Handle GET (show add form) and POST (create expense)."""
@@ -597,6 +890,11 @@ def add_expense():
         category = request.form.get("category", "").strip()
         description = request.form.get("description", "").strip()
         date = request.form.get("date", "").strip()
+        payment_method = request.form.get("payment_method", DEFAULT_PAYMENT_METHOD).strip()
+
+        # Validate payment method — fall back to default if invalid.
+        if payment_method not in PAYMENT_METHODS:
+            payment_method = DEFAULT_PAYMENT_METHOD
 
         # Validation
         errors = []
@@ -623,11 +921,23 @@ def add_expense():
                 "expenses/form.html",
                 mode="add",
                 categories=CATEGORIES,
-                expense={"amount": amount, "category": category, "description": description, "date": date},
+                payment_methods=PAYMENT_METHODS,
+                expense={"amount": amount, "category": category, "description": description, "date": date, "payment_method": payment_method},
                 today=date_helper.today().isoformat(),
             )
 
-        db_create_expense(session["user_id"], amount_float, category, date, description)
+        expense_id = db_create_expense(
+            session["user_id"], amount_float, category, date, description, payment_method,
+        )
+        # Log the "added" event for the Recent Activity feed.
+        db_add_activity(
+            session["user_id"],
+            action="added",
+            expense_id=expense_id,
+            category=category,
+            description=description,
+            amount=amount_float,
+        )
         flash("Expense added successfully!", "success")
         return redirect(url_for("list_expenses"))
 
@@ -635,6 +945,7 @@ def add_expense():
         "expenses/form.html",
         mode="add",
         categories=CATEGORIES,
+        payment_methods=PAYMENT_METHODS,
         expense=None,
         today=date_helper.today().isoformat(),
     )
@@ -658,6 +969,11 @@ def edit_expense(id):
         category = request.form.get("category", "").strip()
         description = request.form.get("description", "").strip()
         date = request.form.get("date", "").strip()
+        payment_method = request.form.get("payment_method", DEFAULT_PAYMENT_METHOD).strip()
+
+        # Validate payment method — fall back to default if invalid.
+        if payment_method not in PAYMENT_METHODS:
+            payment_method = DEFAULT_PAYMENT_METHOD
 
         # Validation
         errors = []
@@ -684,14 +1000,26 @@ def edit_expense(id):
                 "expenses/form.html",
                 mode="edit",
                 categories=CATEGORIES,
-                expense={"id": id, "amount": amount, "category": category, "description": description, "date": date},
+                payment_methods=PAYMENT_METHODS,
+                expense={"id": id, "amount": amount, "category": category, "description": description, "date": date, "payment_method": payment_method},
                 today=date_helper.today().isoformat(),
             )
 
-        updated = db_update_expense(id, session["user_id"], amount_float, category, date, description)
+        updated = db_update_expense(
+            id, session["user_id"], amount_float, category, date, description, payment_method,
+        )
         if not updated:
             abort(403)
 
+        # Log the "edited" event for the Recent Activity feed.
+        db_add_activity(
+            session["user_id"],
+            action="edited",
+            expense_id=id,
+            category=category,
+            description=description,
+            amount=amount_float,
+        )
         flash("Expense updated successfully!", "success")
         return redirect(url_for("list_expenses"))
 
@@ -699,6 +1027,7 @@ def edit_expense(id):
         "expenses/form.html",
         mode="edit",
         categories=CATEGORIES,
+        payment_methods=PAYMENT_METHODS,
         expense=expense,
         today=date_helper.today().isoformat(),
     )
@@ -721,6 +1050,15 @@ def delete_expense_view(id):
         deleted = db_delete_expense(id, session["user_id"])
         if not deleted:
             abort(403)
+        # Log the "deleted" event for the Recent Activity feed.
+        db_add_activity(
+            session["user_id"],
+            action="deleted",
+            expense_id=id,
+            category=expense["category"],
+            description=expense["description"],
+            amount=expense["amount"],
+        )
         flash("Expense deleted successfully!", "success")
         return redirect(url_for("list_expenses"))
 

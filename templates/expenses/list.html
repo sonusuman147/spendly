@@ -41,6 +41,7 @@
                     <th>Date</th>
                     <th>Description</th>
                     <th>Category</th>
+                    <th>Payment</th>
                     <th class="amount-col">Amount</th>
                     <th class="actions-col">Actions</th>
                 </tr>
@@ -51,6 +52,7 @@
                     <td><span class="expense-date">{{ exp.date }}</span></td>
                     <td>{{ exp.description or "—" }}</td>
                     <td><span class="category-tag cat-{{ exp.category.lower() }}">{{ exp.category }}</span></td>
+                    <td><span class="pay-badge pay-{{ exp.payment_method }}">{{ exp.payment_method|capitalize }}</span></td>
                     <td class="amount-col">₹{{ "%.2f"|format(exp.amount) }}</td>
                     <td class="actions-col">
                         <a href="{{ url_for('edit_expense', id=exp.id) }}" class="btn-action">
