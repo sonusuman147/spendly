@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block title %}Merge Categories — Spendly{% endblock %}
+
+{% block page_title %}Merge Categories{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<a href="{{ url_for('categories') }}" class="app-breadcrumb-link">Categories</a>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Merge</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/categories.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="cat-form-section">
+    <div class="cat-form-container cat-form-container-wide">
+
+        <div class="cat-form-card">
+            <h1 class="cat-form-title">Merge Categories</h1>
+            <p class="cat-form-subtitle">
+                Combine two categories into one. All expenses in the <strong>source</strong> category
+                will be reassigned to the <strong>target</strong> category, and the source will be removed.
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                <div class="auth-{{ category }}">{{ message }}</div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="{{ url_for('merge_categories_view') }}">
+                <div class="merge-layout">
+                    <div class="form-group">
+                        <label for="source_id">Source category</label>
+                        <select id="source_id" name="source_id" class="form-select" required>
+                            <option value="">Select source…</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="cat-form-hint">The category to merge FROM. Its expenses move to the target.</p>
+                    </div>
+
+                    <div class="merge-arrow">
+                        <i data-lucide="arrow-right" width="20" height="20"></i>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target_id">Target category</label>
+                        <select id="target_id" name="target_id" class="form-select" required>
+                            <option value="">Select target…</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat.id }}">{{ cat.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <p class="cat-form-hint">The category to merge INTO. It keeps all merged expenses.</p>
+                    </div>
+                </div>
+
+                <div class="cat-warning cat-warning-merge">
+                    <i data-lucide="alert-triangle" width="18" height="18"></i>
+                    <p>This action cannot be undone. The source category and its spending history will be merged into the target.</p>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn-submit">
+                        <i data-lucide="merge" width="16" height="16"></i>
+                        Merge Categories
+                    </button>
+                    <a href="{{ url_for('categories') }}" class="btn-cancel">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
+

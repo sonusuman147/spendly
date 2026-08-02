@@ -22,6 +22,20 @@ from database.db import (
     delete_expenses_bulk as db_delete_expenses_bulk,
     add_activity as db_add_activity,
     get_recent_activity as db_get_recent_activity,
+    # Categories module
+    DEFAULT_CATEGORIES, CATEGORY_ICONS, CATEGORY_COLORS,
+    CATEGORY_SORT_OPTIONS,
+    ensure_default_categories as db_ensure_default_categories,
+    backfill_categories as db_backfill_categories,
+    get_user_categories as db_get_user_categories,
+    create_category as db_create_category,
+    get_category_by_id as db_get_category_by_id,
+    update_category as db_update_category,
+    delete_category as db_delete_category,
+    get_categories as db_get_categories,
+    get_category_stats as db_get_category_stats,
+    get_categories_export as db_get_categories_export,
+    merge_categories as db_merge_categories,
 )
 
 # Python standard library
@@ -51,6 +65,10 @@ oauth.register(
 with app.app_context():
     init_db()
     seed_db()
+    # Ensure every user (including pre-existing ones) has default category
+    # rows so the Categories module works for all accounts.
+    db_backfill_categories()
+
 
 
 # ------------------------------------------------------------------ #
@@ -596,20 +614,29 @@ def list_expenses():
     return render_template("expenses/list.html", expenses=expenses)
 
 
-def _parse_transaction_filters():
+def _parse_transaction_filters(valid_categories=None):
     """Parse and validate the GET filter parameters for the Transactions page.
+
+    `valid_categories` is an optional iterable of accepted category names
+    (the logged-in user's categories). Falls back to the static CATEGORIES
+    list when not provided.
 
     Returns a dict with normalized, validated filter values:
       - search: str (trimmed)
-      - category: str (must be in CATEGORIES, else "")
+      - category: str (must be a valid category, else "")
       - date_from / date_to: str (validated YYYY-MM-DD, else "")
       - amount_min / amount_max: float or None (invalid values are ignored)
       - sort: str (must be in SORT_OPTIONS, else "date-desc")
       - page: int (>= 1)
     """
+    if valid_categories is None:
+        valid_categories = CATEGORIES
+    else:
+        valid_categories = set(valid_categories)
+
     search = request.args.get("search", "").strip()
     category = request.args.get("category", "").strip()
-    if category not in CATEGORIES:
+    if category not in valid_categories:
         category = ""
 
     date_from = request.args.get("date_from", "").strip()
@@ -703,7 +730,12 @@ def transactions():
     if redirect_resp:
         return redirect_resp
 
-    filters = _parse_transaction_filters()
+    # Source category options from the user's categories table so custom
+    # categories appear in the filter dropdown.
+    user_cats = db_get_user_categories(session["user_id"])
+    valid_categories = [c["name"] for c in user_cats] or CATEGORIES
+
+    filters = _parse_transaction_filters(valid_categories)
     result = db_get_transactions(
         session["user_id"],
         search=filters["search"],
@@ -738,7 +770,7 @@ def transactions():
     return render_template(
         "transactions.html",
         transactions=result["items"],
-        categories=CATEGORIES,
+        categories=valid_categories,
         payment_methods=PAYMENT_METHODS,
         summary=result["summary"],
         pagination={
@@ -885,6 +917,11 @@ def add_expense():
     if redirect_resp:
         return redirect_resp
 
+    # Source category options from the user's categories table so custom
+    # categories are selectable when adding expenses.
+    user_cats = db_get_user_categories(session["user_id"])
+    valid_categories = [c["name"] for c in user_cats] or CATEGORIES
+
     if request.method == "POST":
         amount = request.form.get("amount", "").strip()
         category = request.form.get("category", "").strip()
@@ -905,7 +942,7 @@ def add_expense():
         except (ValueError, TypeError):
             errors.append("Amount is required and must be a valid number.")
 
-        if category not in CATEGORIES:
+        if category not in valid_categories:
             errors.append("Please select a valid category.")
 
         if not date:
@@ -920,7 +957,7 @@ def add_expense():
             return render_template(
                 "expenses/form.html",
                 mode="add",
-                categories=CATEGORIES,
+                categories=valid_categories,
                 payment_methods=PAYMENT_METHODS,
                 expense={"amount": amount, "category": category, "description": description, "date": date, "payment_method": payment_method},
                 today=date_helper.today().isoformat(),
@@ -944,7 +981,7 @@ def add_expense():
     return render_template(
         "expenses/form.html",
         mode="add",
-        categories=CATEGORIES,
+        categories=valid_categories,
         payment_methods=PAYMENT_METHODS,
         expense=None,
         today=date_helper.today().isoformat(),
@@ -963,6 +1000,11 @@ def edit_expense(id):
         abort(404)
     if expense["user_id"] != session["user_id"]:
         abort(403)
+
+    # Source category options from the user's categories table so custom
+    # categories are selectable when editing expenses.
+    user_cats = db_get_user_categories(session["user_id"])
+    valid_categories = [c["name"] for c in user_cats] or CATEGORIES
 
     if request.method == "POST":
         amount = request.form.get("amount", "").strip()
@@ -984,7 +1026,7 @@ def edit_expense(id):
         except (ValueError, TypeError):
             errors.append("Amount is required and must be a valid number.")
 
-        if category not in CATEGORIES:
+        if category not in valid_categories:
             errors.append("Please select a valid category.")
 
         if not date:
@@ -999,7 +1041,7 @@ def edit_expense(id):
             return render_template(
                 "expenses/form.html",
                 mode="edit",
-                categories=CATEGORIES,
+                categories=valid_categories,
                 payment_methods=PAYMENT_METHODS,
                 expense={"id": id, "amount": amount, "category": category, "description": description, "date": date, "payment_method": payment_method},
                 today=date_helper.today().isoformat(),
@@ -1026,7 +1068,7 @@ def edit_expense(id):
     return render_template(
         "expenses/form.html",
         mode="edit",
-        categories=CATEGORIES,
+        categories=valid_categories,
         payment_methods=PAYMENT_METHODS,
         expense=expense,
         today=date_helper.today().isoformat(),
@@ -1063,6 +1105,365 @@ def delete_expense_view(id):
         return redirect(url_for("list_expenses"))
 
     return render_template("expenses/delete.html", expense=expense)
+
+
+# ------------------------------------------------------------------ #
+# Categories routes                                                    #
+# ------------------------------------------------------------------ #
+
+def _parse_category_filters():
+    """Parse and validate the GET filter parameters for the Categories page.
+
+    Returns a dict with:
+      - search: str (trimmed)
+      - sort: str (must be in CATEGORY_SORT_OPTIONS, else "name-asc")
+      - page: int (>= 1)
+      - per_page: int
+    """
+    search = request.args.get("search", "").strip()
+    sort = request.args.get("sort", "name-asc")
+    if sort not in CATEGORY_SORT_OPTIONS:
+        sort = "name-asc"
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+    except (TypeError, ValueError):
+        page = 1
+    try:
+        per_page = int(request.args.get("per_page", 8))
+        if per_page < 1:
+            per_page = 8
+    except (TypeError, ValueError):
+        per_page = 8
+    return {"search": search, "sort": sort, "page": page, "per_page": per_page}
+
+
+def _category_query_args(filters):
+    """Build a dict of query params to preserve filter state across pagination."""
+    args = {}
+    if filters["search"]:
+        args["search"] = filters["search"]
+    if filters["sort"] != "name-asc":
+        args["sort"] = filters["sort"]
+    if filters["per_page"] != 8:
+        args["per_page"] = filters["per_page"]
+    return args
+
+
+@app.route("/categories")
+def categories():
+    """Render the Categories dashboard.
+
+    Shows summary cards, a search/filter table with usage stats, a donut
+    chart for spending distribution, a Top Categories ranking, and quick
+    action cards. Supports search, sort, and pagination via query params.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    filters = _parse_category_filters()
+
+    result = db_get_categories(
+        user_id,
+        search=filters["search"],
+        sort=filters["sort"],
+        page=filters["page"],
+        per_page=filters["per_page"],
+    )
+    stats = db_get_category_stats(user_id)
+    all_categories = db_get_user_categories(user_id)
+
+    return render_template(
+        "categories/list.html",
+        categories=result["items"],
+        all_categories=all_categories,
+        stats=stats,
+        pagination={
+            "page": result["page"],
+            "pages": result["pages"],
+            "total": result["total"],
+            "has_prev": result["has_prev"],
+            "has_next": result["has_next"],
+        },
+        filters=filters,
+        query_args=_category_query_args(filters),
+        sort_options=CATEGORY_SORT_OPTIONS,
+        category_colors=CATEGORY_COLORS,
+        per_page=result["per_page"],
+        has_search=filters["search"] != "",
+    )
+
+
+@app.route("/categories/add", methods=["GET", "POST"])
+def add_category():
+    """Handle GET (show create form) and POST (create category)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        icon = request.form.get("icon", "tag").strip()
+        color = request.form.get("color", "").strip()
+
+        # Validate
+        errors = []
+        if not name:
+            errors.append("Category name is required.")
+        elif len(name) > 30:
+            errors.append("Category name must be 30 characters or less.")
+
+        if icon not in CATEGORY_ICONS:
+            errors.append("Please select a valid icon.")
+
+        if color not in CATEGORY_COLORS:
+            errors.append("Please select a valid color.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return render_template(
+                "categories/form.html",
+                mode="add",
+                category={"name": name, "description": description, "icon": icon if icon in CATEGORY_ICONS else "tag", "color": color if color in CATEGORY_COLORS else CATEGORY_COLORS[0]},
+                icons=CATEGORY_ICONS,
+                colors=CATEGORY_COLORS,
+            )
+
+        try:
+            db_create_category(session["user_id"], name, description, icon, color)
+        except sqlite3.IntegrityError:
+            flash("A category with this name already exists.", "error")
+            return render_template(
+                "categories/form.html",
+                mode="add",
+                category={"name": name, "description": description, "icon": icon, "color": color},
+                icons=CATEGORY_ICONS,
+                colors=CATEGORY_COLORS,
+            )
+
+        flash("Category created successfully!", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "categories/form.html",
+        mode="add",
+        category=None,
+        icons=CATEGORY_ICONS,
+        colors=CATEGORY_COLORS,
+    )
+
+
+@app.route("/categories/<int:category_id>")
+def view_category(category_id):
+    """Show a single category with full usage stats."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    category = db_get_category_by_id(category_id, session["user_id"])
+    if category is None:
+        abort(404)
+
+    return render_template("categories/view.html", category=category)
+
+
+@app.route("/categories/<int:category_id>/edit", methods=["GET", "POST"])
+def edit_category(category_id):
+    """Handle GET (show edit form) and POST (update category)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    category = db_get_category_by_id(category_id, session["user_id"])
+    if category is None:
+        abort(404)
+
+    if request.method == "POST":
+        name = request.form.get("name", "").strip()
+        description = request.form.get("description", "").strip()
+        icon = request.form.get("icon", "tag").strip()
+        color = request.form.get("color", "").strip()
+
+        errors = []
+        if not name:
+            errors.append("Category name is required.")
+        elif len(name) > 30:
+            errors.append("Category name must be 30 characters or less.")
+
+        if icon not in CATEGORY_ICONS:
+            errors.append("Please select a valid icon.")
+
+        if color not in CATEGORY_COLORS:
+            errors.append("Please select a valid color.")
+
+        if errors:
+            for error in errors:
+                flash(error, "error")
+            return render_template(
+                "categories/form.html",
+                mode="edit",
+                category={"id": category_id, "name": name, "description": description, "icon": icon if icon in CATEGORY_ICONS else category["icon"], "color": color if color in CATEGORY_COLORS else category["color"]},
+                icons=CATEGORY_ICONS,
+                colors=CATEGORY_COLORS,
+            )
+
+        try:
+            db_update_category(category_id, session["user_id"], name, description, icon, color)
+        except sqlite3.IntegrityError:
+            flash("A category with this name already exists.", "error")
+            return render_template(
+                "categories/form.html",
+                mode="edit",
+                category={"id": category_id, "name": name, "description": description, "icon": icon, "color": color},
+                icons=CATEGORY_ICONS,
+                colors=CATEGORY_COLORS,
+            )
+
+        flash("Category updated successfully!", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "categories/form.html",
+        mode="edit",
+        category=category,
+        icons=CATEGORY_ICONS,
+        colors=CATEGORY_COLORS,
+    )
+
+
+@app.route("/categories/<int:category_id>/delete", methods=["GET", "POST"])
+def delete_category_view(category_id):
+    """Handle GET (show delete confirmation) and POST (execute delete).
+
+    If the category is in use by expenses, deletion is blocked unless the
+    user confirms via the form; on confirmed delete the expenses are
+    reassigned to "Other".
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    category = db_get_category_by_id(category_id, session["user_id"])
+    if category is None:
+        abort(404)
+
+    in_use = category["transaction_count"] > 0
+
+    if request.method == "POST":
+        confirmed = request.form.get("confirm", "") == "yes"
+        if in_use and not confirmed:
+            flash("Please confirm deletion of this in-use category.", "error")
+            return render_template(
+                "categories/delete.html",
+                category=category,
+                in_use=in_use,
+            )
+
+        deleted = db_delete_category(category_id, session["user_id"], reassign=True)
+        if not deleted:
+            abort(403)
+        flash("Category deleted! Any expenses were reassigned to 'Other'.", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "categories/delete.html",
+        category=category,
+        in_use=in_use,
+    )
+
+
+@app.route("/categories/merge", methods=["GET", "POST"])
+def merge_categories_view():
+    """Handle GET (show merge form) and POST (merge categories)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    if request.method == "POST":
+        source_id = request.form.get("source_id", "").strip()
+        target_id = request.form.get("target_id", "").strip()
+
+        try:
+            source_id = int(source_id)
+            target_id = int(target_id)
+        except (TypeError, ValueError):
+            source_id = None
+            target_id = None
+
+        if source_id is None or target_id is None:
+            flash("Please select both categories to merge.", "error")
+            return redirect(url_for("categories"))
+
+        if source_id == target_id:
+            flash("Source and target categories must be different.", "error")
+            return redirect(url_for("categories"))
+
+        merged = db_merge_categories(session["user_id"], source_id, target_id)
+        if not merged:
+            flash("Could not merge — please check the selected categories.", "error")
+            return redirect(url_for("categories"))
+
+        flash("Categories merged successfully!", "success")
+        return redirect(url_for("categories"))
+
+    return render_template(
+        "categories/merge.html",
+        categories=db_get_user_categories(session["user_id"]),
+    )
+
+
+@app.route("/categories/export")
+def categories_export():
+    """Export all categories with usage stats as a CSV file."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    rows = db_get_categories_export(session["user_id"])
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Name", "Description", "Icon", "Color", "Created Date",
+        "Transaction Count", "Total Spent", "Average Expense",
+    ])
+    for row in rows:
+        writer.writerow([
+            row["name"],
+            row["description"],
+            row["icon"],
+            row["color"],
+            row["created_at"],
+            row["transaction_count"],
+            f"{row['total_spent']:.2f}",
+            f"{row['avg_expense']:.2f}",
+        ])
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spendly-categories.csv"},
+    )
+
+
+@app.route("/categories/analytics")
+def categories_analytics():
+    """Render a dedicated analytics page with category insights."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    stats = db_get_category_stats(session["user_id"])
+    categories = db_get_categories_export(session["user_id"])
+    return render_template(
+        "categories/analytics.html",
+        stats=stats,
+        categories=categories,
+    )
 
 
 if __name__ == "__main__":
