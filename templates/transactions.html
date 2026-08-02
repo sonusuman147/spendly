@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+
+{% block title %}Transactions — Spendly{% endblock %}
+
+{% block page_title %}Transactions{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Transactions</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/transactions.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="transactions-section">
+
+    <!-- ============ Page Header ============ -->
+    <div class="transactions-header">
+        <div class="transactions-header-copy">
+            <h1 class="transactions-title">Transactions</h1>
+            <p class="transactions-subtitle">Every expense, one clear ledger. Search, filter, and export with ease.</p>
+        </div>
+        <div class="transactions-header-actions">
+            <a href="{{ url_for('add_expense') }}" class="btn-add">
+                <i data-lucide="plus" width="18" height="18"></i>
+                Add Transaction
+            </a>
+            <a href="{{ url_for('transactions_export', **query_args) }}" class="btn-export">
+                <i data-lucide="download" width="18" height="18"></i>
+                Export
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============ Summary Cards (computed server-side from filtered set) ============ -->
+    <div class="transactions-stats" id="summaryGrid">
+        <div class="stat-card txn-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="receipt" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Ledger</span>
+            </div>
+            <div class="stat-label">Total Transactions</div>
+            <div class="stat-value" id="statCount">{{ summary.total_count }}</div>
+        </div>
+        <div class="stat-card txn-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="wallet" class="stat-icon"></i>
+                </div>
+                <span class="stat-change negative">Spent</span>
+            </div>
+            <div class="stat-label">Total Amount</div>
+            <div class="stat-value" id="statAmount">₹{{ "%.2f"|format(summary.total_amount) }}</div>
+        </div>
+        <div class="stat-card txn-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="trending-up" class="stat-icon"></i>
+                </div>
+                <span class="stat-change positive">Top</span>
+            </div>
+            <div class="stat-label">Highest Expense</div>
+            <div class="stat-value stat-value-sm" id="statHighest">₹{{ "%.2f"|format(summary.highest) }}</div>
+        </div>
+        <div class="stat-card txn-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="calculator" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Avg</span>
+            </div>
+            <div class="stat-label">Average Expense</div>
+            <div class="stat-value stat-value-sm" id="statAverage">₹{{ "%.2f"|format(summary.average) }}</div>
+        </div>
+        <div class="stat-card txn-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap">
+                    <i data-lucide="clock" class="stat-icon"></i>
+                </div>
+                <span class="stat-change neutral">Recent</span>
+            </div>
+            <div class="stat-label">Last Transaction</div>
+            <div class="stat-value stat-value-xs" id="statLast">
+                {% if summary.last %}{{ summary.last.date }}{% else %}—{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Main Two-Column Layout ============ -->
+    <div class="transactions-layout">
+
+        <!-- Left column: filter + table -->
+        <div class="transactions-main-col">
+
+            <!-- ============ Advanced Filter Bar (server-side via GET) ============ -->
+            <form method="GET" action="{{ url_for('transactions') }}" class="txn-filter-bar" id="filterForm">
+                <div class="filter-row filter-row-search">
+                    <div class="filter-search-wrap">
+                        <i data-lucide="search" class="filter-search-icon"></i>
+                        <input type="search" name="search" id="filterSearch" class="filter-search-input"
+                               placeholder="Search description, category, amount…" aria-label="Search transactions"
+                               value="{{ filters.search }}">
+                    </div>
+                </div>
+
+                <div class="filter-grid">
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">Category</span>
+                        <select name="category" id="filterCategory" class="filter-select">
+                            <option value="">All categories</option>
+                            {% for cat in categories %}
+                            <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">From date</span>
+                        <input type="date" name="date_from" id="filterDateFrom" class="filter-input" value="{{ filters.date_from }}">
+                    </label>
+
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">To date</span>
+                        <input type="date" name="date_to" id="filterDateTo" class="filter-input" value="{{ filters.date_to }}">
+                    </label>
+
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">Min amount</span>
+                        <input type="number" name="amount_min" id="filterAmountMin" class="filter-input"
+                               min="0" step="0.01" placeholder="₹0"
+                               value="{{ filters.amount_min if filters.amount_min is not none else '' }}">
+                    </label>
+
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">Max amount</span>
+                        <input type="number" name="amount_max" id="filterAmountMax" class="filter-input"
+                               min="0" step="0.01" placeholder="Any"
+                               value="{{ filters.amount_max if filters.amount_max is not none else '' }}">
+                    </label>
+
+                    <label class="txn-filter-field">
+                        <span class="txn-filter-label">Sort by</span>
+                        <select name="sort" id="filterSort" class="filter-select">
+                            <option value="date-desc" {% if filters.sort == 'date-desc' %}selected{% endif %}>Date (newest first)</option>
+                            <option value="date-asc" {% if filters.sort == 'date-asc' %}selected{% endif %}>Date (oldest first)</option>
+                            <option value="amount-desc" {% if filters.sort == 'amount-desc' %}selected{% endif %}>Amount (high → low)</option>
+                            <option value="amount-asc" {% if filters.sort == 'amount-asc' %}selected{% endif %}>Amount (low → high)</option>
+                            <option value="category-asc" {% if filters.sort == 'category-asc' %}selected{% endif %}>Category (A → Z)</option>
+                        </select>
+                    </label>
+                </div>
+
+                <div class="filter-row filter-row-footer">
+                    <span class="filter-result-count" id="filterResultCount">Showing {{ pagination.total }} transaction{{ 's' if pagination.total != 1 else '' }}</span>
+                    <button type="button" class="filter-reset-btn" id="filterReset">
+                        <i data-lucide="rotate-ccw" width="14" height="14"></i>
+                        Reset filters
+                    </button>
+                </div>
+            </form>
+
+            <!-- Bulk delete success feedback target (client-side) -->
+
+            <!-- ============ Bulk Selection Bar ============ -->
+            <form method="POST" action="{{ url_for('transactions_bulk_delete', **query_args) }}" class="txn-bulk-bar" id="bulkForm" hidden>
+                <div class="txn-bulk-info">
+                    <input type="checkbox" id="bulkSelectAll" class="txn-checkbox" aria-label="Select all on page">
+                    <span id="bulkCountLabel">0 selected</span>
+                </div>
+                <div class="txn-bulk-actions">
+                    <a href="#" class="btn-action" id="bulkExportBtn" title="Export selected as CSV">
+                        <i data-lucide="download" width="14" height="14"></i>
+                        Export
+                    </a>
+                    <button type="submit" class="btn-action btn-action-danger" id="bulkDeleteBtn" title="Delete selected transactions">
+                        <i data-lucide="trash-2" width="14" height="14"></i>
+                        Delete
+                    </button>
+                </div>
+            </form>
+
+            <!-- ============ Transactions Table (server-rendered) ============ -->
+            <div class="txn-table-card">
+                <div class="txn-table-scroll">
+                    <table class="txn-table">
+                        <thead>
+                            <tr>
+                                <th class="txn-check-col">
+                                    <input type="checkbox" id="selectAll" class="txn-checkbox" aria-label="Select all on page">
+                                </th>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th>Payment</th>
+                                <th class="amount-col">Amount</th>
+                                <th class="actions-col">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="txnBody">
+                            {% for txn in transactions %}
+                            <tr data-id="{{ txn.id }}">
+                                <td class="txn-check-cell">
+                                    <input type="checkbox" class="txn-checkbox row-check" name="expense_ids" value="{{ txn.id }}" aria-label="Select transaction" form="bulkForm">
+                                </td>
+                                <td><span class="txn-date">{{ txn.date }}</span></td>
+                                <td><span class="txn-desc{{ '' if txn.description else ' txn-desc-empty' }}">{{ txn.description or 'No description' }}</span></td>
+                                <td><span class="category-tag cat-{{ txn.category.lower() }}">{{ txn.category }}</span></td>
+                                <td><span class="pay-badge pay-{{ txn.payment_method }}">{{ txn.payment_method|capitalize }}</span></td>
+                                <td class="amount-col">₹{{ "%.2f"|format(txn.amount) }}</td>
+                                <td class="actions-col">
+                                    <span class="txn-actions">
+                                        <button type="button" class="txn-icon-btn row-view" data-id="{{ txn.id }}" title="View" aria-label="View transaction">
+                                            <i data-lucide="eye" width="15" height="15"></i>
+                                        </button>
+                                        <a href="{{ url_for('edit_expense', id=txn.id) }}" class="txn-icon-btn" title="Edit" aria-label="Edit transaction">
+                                            <i data-lucide="pencil" width="15" height="15"></i>
+                                        </a>
+                                        <a href="{{ url_for('delete_expense_view', id=txn.id) }}" class="txn-icon-btn txn-icon-btn-danger" title="Delete" aria-label="Delete transaction">
+                                            <i data-lucide="trash-2" width="15" height="15"></i>
+                                        </a>
+                                    </span>
+                                </td>
+                            </tr>
+                            {% else %}
+                            <!-- tbody content handled by empty states below -->
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty state (no data at all) -->
+                <div class="txn-empty" id="txnEmptyAll" {% if transactions or pagination.total %}hidden{% endif %}>
+                    <div class="txn-empty-icon"><i data-lucide="receipt" width="48" height="48"></i></div>
+                    <h2 class="txn-empty-title">No transactions yet</h2>
+                    <p class="txn-empty-text">Add your first transaction to start building your ledger.</p>
+                    <a href="{{ url_for('add_expense') }}" class="btn-primary">Add Transaction</a>
+                </div>
+
+                <!-- Empty state (filters match nothing) -->
+                <div class="txn-empty" id="txnEmptyFiltered" {% if transactions or not has_active_filters or pagination.total %}hidden{% endif %}>
+                    <div class="txn-empty-icon"><i data-lucide="search-x" width="48" height="48"></i></div>
+                    <h2 class="txn-empty-title">No matching transactions</h2>
+                    <p class="txn-empty-text">Try adjusting or clearing your filters.</p>
+                    <a href="{{ url_for('transactions') }}" class="btn-ghost" id="emptyResetBtn">Reset filters</a>
+                </div>
+
+                <!-- Pagination (server-rendered links) -->
+                {% if pagination.pages > 1 %}
+                <div class="txn-pagination" id="pagination">
+                    <a href="{{ url_for('transactions', page=pagination.page - 1, **query_args) if pagination.has_prev else '#' }}"
+                       class="page-btn {% if not pagination.has_prev %}is-disabled{% endif %}" id="pagePrev" aria-label="Previous page">
+                        <i data-lucide="chevron-left" width="16" height="16"></i>
+                    </a>
+                    <span class="page-info" id="pageInfo">Page {{ pagination.page }} of {{ pagination.pages }}</span>
+                    <a href="{{ url_for('transactions', page=pagination.page + 1, **query_args) if pagination.has_next else '#' }}"
+                       class="page-btn {% if not pagination.has_next %}is-disabled{% endif %}" id="pageNext" aria-label="Next page">
+                        <i data-lucide="chevron-right" width="16" height="16"></i>
+                    </a>
+                </div>
+                {% else %}
+                <div class="txn-pagination" id="pagination" hidden></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right column: Recent Activity -->
+        <aside class="transactions-side-col">
+            <div class="dashboard-card activity-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="activity" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Recent Activity</h2>
+                    </div>
+                    <span class="activity-chip">Live</span>
+                </div>
+                <div class="dashboard-card-body">
+                    <ul class="activity-list" id="activityList">
+                        {% for act in activity %}
+                        <li class="activity-item">
+                            <div class="activity-icon activity-icon-{{ act.action }}">
+                                <i data-lucide="{% if act.action == 'added' %}plus{% elif act.action == 'edited' %}pencil{% else %}trash-2{% endif %}" width="15" height="15"></i>
+                            </div>
+                            <div class="activity-body">
+                                <div class="activity-text">
+                                    <strong>{{ act.category }}</strong>
+                                    {% if act.description %} · {{ act.description }}{% else %} · No description{% endif %}
+                                </div>
+                                <div class="activity-meta">
+                                    <span class="activity-time" data-activity-time="{{ act.created_at }}">{{ act.created_at }}</span>
+                                </div>
+                            </div>
+                            <span class="activity-amount">₹{{ "%.2f"|format(act.amount or 0) }}</span>
+                        </li>
+                        {% else %}
+                        <li class="activity-empty">No activity yet. Add a transaction to see it here.</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ============ View Transaction Modal ============ -->
+    <div class="txn-modal" id="txnModal" hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel" role="dialog" aria-modal="true" aria-labelledby="txnModalTitle">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title" id="txnModalTitle">Transaction Details</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x" width="18" height="18"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body" id="txnModalBody">
+                <!-- Populated client-side from window.SPENDLY_TRANSACTIONS.transactions -->
+            </div>
+        </div>
+    </div>
+
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/transactions.js') }}"></script>
+<script>
+    // Pass server-rendered data to the frontend module.
+    // URL builders are generated with url_for() so internal links are never hardcoded.
+    window.SPENDLY_TRANSACTIONS = {
+        transactions: {{ transactions | tojson }},
+        categories: {{ categories | tojson }},
+        paymentMethods: {{ payment_methods | tojson }},
+        queryArgs: {{ query_args | tojson }},
+        filters: {{ filters | tojson }},
+        urls: {
+            exportBase: {{ url_for('transactions_export') | tojson }},
+            edit: {{ url_for('edit_expense', id=0) | tojson }},
+            delete: {{ url_for('delete_expense_view', id=0) | tojson }}
+        }
+    };
+</script>
+{% endblock %}
+

@@ -45,6 +45,10 @@
                     <span class="delete-detail-value">{{ expense.description or "—" }}</span>
                 </div>
                 <div class="delete-detail-row">
+                    <span class="delete-detail-label">Payment</span>
+                    <span class="delete-detail-value">{{ expense.payment_method|capitalize }}</span>
+                </div>
+                <div class="delete-detail-row">
                     <span class="delete-detail-label">Date</span>
                     <span class="delete-detail-value">{{ expense.date }}</span>
                 </div>

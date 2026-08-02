@@ -22,6 +22,24 @@ SECURITY_QUESTIONS = [
     "What was the name of your first school?",
 ]
 
+# Payment methods supported by the Transactions module. Stored as TEXT on
+# the expenses table so existing data stays valid (defaults to "cash").
+PAYMENT_METHODS = ["card", "upi", "cash", "bank", "wallet"]
+
+DEFAULT_PAYMENT_METHOD = "cash"
+
+# Actions recorded in the activities table (Recent Activity feed).
+ACTIVITY_ACTIONS = ("added", "edited", "deleted")
+
+# Whitelist of allowed sort keys for server-side transaction sorting.
+SORT_OPTIONS = {
+    "date-desc": "date DESC, created_at DESC",
+    "date-asc": "date ASC, created_at ASC",
+    "amount-desc": "amount DESC, created_at DESC",
+    "amount-asc": "amount ASC, created_at ASC",
+    "category-asc": "category ASC, date DESC",
+}
+
 
 def get_db():
     """Open and return a connection to the SQLite database.
@@ -61,6 +79,20 @@ def init_db():
             category TEXT NOT NULL,
             date TEXT NOT NULL,
             description TEXT,
+            payment_method TEXT NOT NULL DEFAULT 'cash',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS activities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            action TEXT NOT NULL,
+            expense_id INTEGER,
+            category TEXT,
+            description TEXT,
+            amount REAL,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
@@ -79,6 +111,12 @@ def init_db():
 
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN security_answer_hash TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    # Add payment_method column to expenses if not already present — safe on repeated runs
+    try:
+        cursor.execute("ALTER TABLE expenses ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'cash'")
     except sqlite3.OperationalError:
         pass  # Column already exists
 
@@ -112,23 +150,35 @@ def seed_db():
 
     today = date.today()
 
-    # Insert 8 sample expenses across multiple categories
+    # Insert 8 sample expenses across multiple categories with payment methods
     sample_expenses = [
-        (user_id, 450.00, "Food", today - timedelta(days=28), "Weekly groceries"),
-        (user_id, 150.00, "Transport", today - timedelta(days=25), "Bus pass recharge"),
-        (user_id, 2000.00, "Bills", today - timedelta(days=20), "Electricity bill"),
-        (user_id, 600.00, "Health", today - timedelta(days=18), "Pharmacy — medicines"),
-        (user_id, 350.00, "Entertainment", today - timedelta(days=14), "Movie tickets"),
-        (user_id, 1200.00, "Shopping", today - timedelta(days=10), "New headphones"),
-        (user_id, 320.00, "Food", today - timedelta(days=5), "Dinner at pizzeria"),
-        (user_id, 100.00, "Other", today - timedelta(days=2), "Miscellaneous"),
+        (user_id, 450.00, "Food", today - timedelta(days=28), "Weekly groceries", "upi"),
+        (user_id, 150.00, "Transport", today - timedelta(days=25), "Bus pass recharge", "cash"),
+        (user_id, 2000.00, "Bills", today - timedelta(days=20), "Electricity bill", "bank"),
+        (user_id, 600.00, "Health", today - timedelta(days=18), "Pharmacy — medicines", "card"),
+        (user_id, 350.00, "Entertainment", today - timedelta(days=14), "Movie tickets", "wallet"),
+        (user_id, 1200.00, "Shopping", today - timedelta(days=10), "New headphones", "card"),
+        (user_id, 320.00, "Food", today - timedelta(days=5), "Dinner at pizzeria", "upi"),
+        (user_id, 100.00, "Other", today - timedelta(days=2), "Miscellaneous", "cash"),
     ]
 
     cursor.executemany(
-        "INSERT INTO expenses (user_id, amount, category, date, description) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO expenses (user_id, amount, category, date, description, payment_method) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
         [
-            (uid, amt, cat, d.isoformat(), desc)
-            for uid, amt, cat, d, desc in sample_expenses
+            (uid, amt, cat, d.isoformat(), desc, pm)
+            for uid, amt, cat, d, desc, pm in sample_expenses
+        ],
+    )
+
+    # Seed matching "added" activity records so Recent Activity is populated
+    # with real data for the demo user on first boot.
+    cursor.executemany(
+        "INSERT INTO activities (user_id, action, expense_id, category, description, amount) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            (user_id, "added", i + 1, cat, desc, amt)
+            for i, (uid, amt, cat, d, desc, pm) in enumerate(sample_expenses)
         ],
     )
 
@@ -373,17 +423,20 @@ def get_user_expenses_summary(user_id, start_date=None, end_date=None):
     }
 
 
-def create_expense(user_id, amount, category, date, description):
+def create_expense(user_id, amount, category, date, description, payment_method=None):
     """Insert a new expense and return its id.
 
-    Uses parameterized queries — safe from SQL injection.
+    If payment_method is None or not a known method, DEFAULT_PAYMENT_METHOD
+    is used. Uses parameterized queries — safe from SQL injection.
     """
+    if payment_method not in PAYMENT_METHODS:
+        payment_method = DEFAULT_PAYMENT_METHOD
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "INSERT INTO expenses (user_id, amount, category, date, description) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (user_id, amount, category, date, description),
+        "INSERT INTO expenses (user_id, amount, category, date, description, payment_method) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, amount, category, date, description, payment_method),
     )
     expense_id = cursor.lastrowid
     conn.commit()
@@ -400,7 +453,7 @@ def get_expenses_by_user(user_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, user_id, amount, category, date, description, created_at "
+        "SELECT id, user_id, amount, category, date, description, payment_method, created_at "
         "FROM expenses WHERE user_id = ? "
         "ORDER BY date DESC, created_at DESC",
         (user_id,),
@@ -418,7 +471,7 @@ def get_expense_by_id(expense_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, user_id, amount, category, date, description, created_at "
+        "SELECT id, user_id, amount, category, date, description, payment_method, created_at "
         "FROM expenses WHERE id = ?",
         (expense_id,),
     )
@@ -427,18 +480,21 @@ def get_expense_by_id(expense_id):
     return dict(expense) if expense else None
 
 
-def update_expense(expense_id, user_id, amount, category, date, description):
+def update_expense(expense_id, user_id, amount, category, date, description, payment_method=None):
     """Update an expense row WHERE id = ? AND user_id = ?.
 
-    Returns True if a row was updated, False if no matching row found.
+    If payment_method is None or not a known method, DEFAULT_PAYMENT_METHOD
+    is used. Returns True if a row was updated, False if no matching row found.
     Uses parameterized queries — safe from SQL injection.
     """
+    if payment_method not in PAYMENT_METHODS:
+        payment_method = DEFAULT_PAYMENT_METHOD
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ? "
+        "UPDATE expenses SET amount = ?, category = ?, date = ?, description = ?, payment_method = ? "
         "WHERE id = ? AND user_id = ?",
-        (amount, category, date, description, expense_id, user_id),
+        (amount, category, date, description, payment_method, expense_id, user_id),
     )
     affected = cursor.rowcount
     conn.commit()
@@ -462,3 +518,230 @@ def delete_expense(expense_id, user_id):
     conn.commit()
     conn.close()
     return affected > 0
+
+
+def _build_transaction_filters(search, category, date_from, date_to,
+                               amount_min, amount_max):
+    """Build the WHERE clause and parameters for transaction queries.
+
+    All values are bound with `?` placeholders — never interpolated directly
+    into SQL. Returns a tuple of (where_clause, params) where params does NOT
+    include the user_id (the caller prepends it first).
+    """
+    clauses = ["WHERE user_id = ?"]
+    params = []
+
+    # Search across description, category, and payment method.
+    if search:
+        clauses.append(
+            "(description LIKE ? OR category LIKE ? OR payment_method LIKE ?)"
+        )
+        like = f"%{search}%"
+        params.append(like)
+        params.append(like)
+        params.append(like)
+
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+
+    if date_from:
+        clauses.append("date >= ?")
+        params.append(date_from)
+
+    if date_to:
+        clauses.append("date <= ?")
+        params.append(date_to)
+
+    if amount_min is not None:
+        clauses.append("amount >= ?")
+        params.append(amount_min)
+
+    if amount_max is not None:
+        clauses.append("amount <= ?")
+        params.append(amount_max)
+
+    return " AND ".join(clauses), params
+
+
+def get_transactions(user_id, search="", category="", date_from=None, date_to=None,
+                     amount_min=None, amount_max=None, sort="date-desc",
+                     page=1, per_page=8):
+    """Fetch paginated, server-side filtered transactions for a user.
+
+    Returns a dict with:
+      - items: list of expense dicts on the requested page
+      - total: total number of matching transactions
+      - pages: total number of pages
+      - page: current page (clamped to valid range)
+      - per_page: page size
+      - has_prev / has_next: booleans for pagination UI
+      - summary: dict with total_count, total_amount, highest, average, last
+        computed from the *filtered* set (accurate statistics).
+
+    `sort` is validated against SORT_OPTIONS before being used — anything else
+    falls back to "date-desc". Uses parameterized queries — safe from SQL
+    injection. When per_page is None, all matching rows are returned (used for
+    CSV export).
+    """
+    sort_sql = SORT_OPTIONS.get(sort, SORT_OPTIONS["date-desc"])
+    where, params = _build_transaction_filters(
+        search, category, date_from, date_to, amount_min, amount_max,
+    )
+    full_params = [user_id] + params
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Total matching count (unaffected by pagination).
+    cursor.execute(f"SELECT COUNT(*) AS total FROM expenses {where}", tuple(full_params))
+    total = cursor.fetchone()["total"]
+
+    # Summary statistics over the filtered set.
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_amount, "
+        "COALESCE(MAX(amount), 0.0) AS highest, "
+        "COALESCE(AVG(amount), 0.0) AS average "
+        f"FROM expenses {where}",
+        tuple(full_params),
+    )
+    agg = cursor.fetchone()
+
+    # Determine the "last" transaction (most recent by date) in the filtered set.
+    cursor.execute(
+        "SELECT id, user_id, amount, category, date, description, payment_method, created_at "
+        f"FROM expenses {where} "
+        "ORDER BY date DESC, created_at DESC LIMIT 1",
+        tuple(full_params),
+    )
+    last_row = cursor.fetchone()
+
+    # Pagination math.
+    if per_page is None or per_page <= 0:
+        per_page = total if total > 0 else 1
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page), pages))
+
+    # Fetch the page of items.
+    cursor.execute(
+        "SELECT id, user_id, amount, category, date, description, payment_method, created_at "
+        f"FROM expenses {where} "
+        f"ORDER BY {sort_sql} LIMIT ? OFFSET ?",
+        tuple(full_params) + (per_page, (page - 1) * per_page),
+    )
+    items = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+
+    summary = {
+        "total_count": total,
+        "total_amount": round(agg["total_amount"], 2),
+        "highest": round(agg["highest"], 2),
+        "average": round(agg["average"], 2),
+        "last": dict(last_row) if last_row else None,
+    }
+
+    return {
+        "items": items,
+        "total": total,
+        "pages": pages,
+        "page": page,
+        "per_page": per_page,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+        "summary": summary,
+    }
+
+
+def get_expenses_by_ids(user_id, ids):
+    """Return expense rows for the given ids, scoped to the user.
+
+    Silently ignores ids that do not belong to the user. Returns a list of
+    dicts. Uses parameterized queries — safe from SQL injection.
+    """
+    if not ids:
+        return []
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in ids)
+    cursor.execute(
+        f"SELECT id, user_id, amount, category, date, description, payment_method, created_at "
+        f"FROM expenses WHERE user_id = ? AND id IN ({placeholders})",
+        (user_id, *ids),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def delete_expenses_bulk(user_id, ids):
+    """Delete multiple expenses owned by the user.
+
+    Returns the number of rows actually deleted. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    if not ids:
+        return 0
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in ids)
+    cursor.execute(
+        f"DELETE FROM expenses WHERE user_id = ? AND id IN ({placeholders})",
+        (user_id, *ids),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected
+
+
+def add_activity(user_id, action, expense_id=None, category=None,
+                 description=None, amount=None):
+    """Record an activity entry for the Recent Activity feed.
+
+    `action` must be one of ACTIVITY_ACTIONS ("added", "edited", "deleted").
+    Invalid actions are rejected with a ValueError. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    if action not in ACTIVITY_ACTIONS:
+        raise ValueError(f"Invalid activity action: {action!r}")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO activities (user_id, action, expense_id, category, description, amount) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, action, expense_id, category, description, amount),
+    )
+    activity_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return activity_id
+
+
+def get_recent_activity(user_id, limit=8, category=None):
+    """Return the most recent activity entries for a user.
+
+    Ordered by created_at descending (most recent first), limited to `limit`
+    rows. When `category` is provided, only activity rows for that category
+    are returned (used to keep the panel coherent with the Transactions page's
+    active category filter). Returns a list of dicts. Uses parameterized
+    queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    if category:
+        cursor.execute(
+            "SELECT id, user_id, action, expense_id, category, description, amount, created_at "
+            "FROM activities WHERE user_id = ? AND category = ? "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (user_id, category, limit),
+        )
+    else:
+        cursor.execute(
+            "SELECT id, user_id, action, expense_id, category, description, amount, created_at "
+            "FROM activities WHERE user_id = ? "
+            "ORDER BY created_at DESC, id DESC LIMIT ?",
+            (user_id, limit),
+        )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
