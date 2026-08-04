@@ -30,12 +30,15 @@ from database.db import (
     get_user_categories as db_get_user_categories,
     create_category as db_create_category,
     get_category_by_id as db_get_category_by_id,
-    update_category as db_update_category,
+update_category as db_update_category,
     delete_category as db_delete_category,
     get_categories as db_get_categories,
     get_category_stats as db_get_category_stats,
     get_categories_export as db_get_categories_export,
     merge_categories as db_merge_categories,
+    # Reports module
+    get_report_data as db_get_report_data,
+    REPORT_DEFAULT_MONTHS,
 )
 
 # Python standard library
@@ -1463,6 +1466,116 @@ def categories_analytics():
         "categories/analytics.html",
         stats=stats,
         categories=categories,
+    )
+
+
+# ------------------------------------------------------------------ #
+# Reports routes                                                       #
+# ------------------------------------------------------------------ #
+
+def _parse_report_filters():
+    """Parse and validate the GET filter parameters for the Reports page.
+
+    Returns a dict with:
+      - date_from / date_to: str (validated YYYY-MM-DD, else "")
+      - category: str (trimmed)
+      - payment: str (must be in PAYMENT_METHODS, else "")
+    """
+    date_from = request.args.get("date_from", "").strip()
+    date_to = request.args.get("date_to", "").strip()
+
+    # Validate date formats — invalid dates are treated as no filter.
+    try:
+        if date_from:
+            dt_datetime.strptime(date_from, "%Y-%m-%d")
+        else:
+            date_from = ""
+    except ValueError:
+        date_from = ""
+
+    try:
+        if date_to:
+            dt_datetime.strptime(date_to, "%Y-%m-%d")
+        else:
+            date_to = ""
+    except ValueError:
+        date_to = ""
+
+    category = request.args.get("category", "").strip()
+    payment = request.args.get("payment", "").strip()
+    if payment not in PAYMENT_METHODS:
+        payment = ""
+
+    return {
+        "date_from": date_from,
+        "date_to": date_to,
+        "category": category,
+        "payment": payment,
+    }
+
+
+def _report_query_args(filters):
+    """Build a dict of query params to preserve report filter state."""
+    args = {}
+    if filters["date_from"]:
+        args["date_from"] = filters["date_from"]
+    if filters["date_to"]:
+        args["date_to"] = filters["date_to"]
+    if filters["category"]:
+        args["category"] = filters["category"]
+    if filters["payment"]:
+        args["payment"] = filters["payment"]
+    return args
+
+
+@app.route("/reports")
+def reports():
+    """Render the Reports dashboard with database-backed analytics.
+
+    Supports optional date range, category, and payment method filters via
+    GET query parameters. Returns summary cards, monthly trend, category and
+    payment breakdowns, top expenses, monthly summary, and data-driven
+    insight cards. All data is computed from the user's real expenses.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    filters = _parse_report_filters()
+
+    # Source category options from the user's categories table so custom
+    # categories appear in the filter dropdown.
+    user_cats = db_get_user_categories(user_id)
+    valid_categories = [c["name"] for c in user_cats] or CATEGORIES
+
+    date_from = filters["date_from"] or None
+    date_to = filters["date_to"] or None
+    category = filters["category"] or None
+    payment = filters["payment"] or None
+
+    report = db_get_report_data(
+        user_id,
+        date_from=date_from,
+        date_to=date_to,
+        category=category,
+        payment=payment,
+        months=REPORT_DEFAULT_MONTHS,
+    )
+
+    return render_template(
+        "reports.html",
+        report=report,
+        categories=valid_categories,
+        payment_methods=PAYMENT_METHODS,
+        filters=filters,
+        query_args=_report_query_args(filters),
+        has_active_filters=any([
+            filters["date_from"],
+            filters["date_to"],
+            filters["category"],
+            filters["payment"],
+        ]),
     )
 
 

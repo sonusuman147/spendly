@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+
+{% block title %}Reports — Spendly{% endblock %}
+
+{% block page_title %}Reports{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Reports</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/reports.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="reports-section">
+
+    <!-- ============ Page Header ============ -->
+    <div class="reports-header">
+        <div class="reports-header-copy">
+            <h1 class="reports-title">Reports</h1>
+            <p class="reports-subtitle">Understand your spending at a glance. Generate, export, and share insights.</p>
+        </div>
+        <div class="reports-header-actions">
+            <button type="button" class="btn-primary btn-report" data-report-generate>
+                <i data-lucide="sparkles" width="18" height="18"></i>
+                Generate Report
+            </button>
+            <button type="button" class="btn-export" data-export-pdf title="Download this report as PDF">
+                <i data-lucide="file-text" width="18" height="18"></i>
+                Export PDF
+            </button>
+            <button type="button" class="btn-export" data-export-excel title="Download this report as Excel">
+                <i data-lucide="file-spreadsheet" width="18" height="18"></i>
+                Export Excel
+            </button>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============ Filter Bar ============ -->
+    <form class="reports-filter-bar" id="reportFilterForm" method="GET" action="{{ url_for('reports') }}">
+        <div class="reports-filter-grid">
+            <label class="txn-filter-field">
+                <span class="txn-filter-label">From date</span>
+                <input type="date" name="date_from" id="reportDateFrom" class="filter-input"
+                       value="{{ filters.date_from }}">
+            </label>
+            <label class="txn-filter-field">
+                <span class="txn-filter-label">To date</span>
+                <input type="date" name="date_to" id="reportDateTo" class="filter-input"
+                       value="{{ filters.date_to }}">
+            </label>
+            <label class="txn-filter-field">
+                <span class="txn-filter-label">Category</span>
+                <select name="category" id="reportCategory" class="filter-select">
+                    <option value="">All categories</option>
+                    {% for cat in categories %}
+                    <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="txn-filter-field">
+                <span class="txn-filter-label">Payment method</span>
+                <select name="payment" id="reportPayment" class="filter-select">
+                    <option value="">All methods</option>
+                    {% for method in payment_methods %}
+                    <option value="{{ method }}" {% if filters.payment == method %}selected{% endif %}>{{ method|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+        </div>
+        <div class="reports-filter-footer">
+            <span class="filter-result-count" id="reportResultCount">
+                {% if has_active_filters %}Showing filtered report{% else %}Report generated for the last 6 months{% endif %}
+            </span>
+            <div class="reports-filter-actions">
+                <a href="{{ url_for('reports') }}" class="filter-reset-btn" id="reportFilterReset">
+                    <i data-lucide="rotate-ccw" width="14" height="14"></i>
+                    Reset
+                </a>
+                <button type="submit" class="filter-apply-btn">
+                    <i data-lucide="filter" width="14" height="14"></i>
+                    Apply
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- ============ Summary Cards (6) ============ -->
+    {% set s = report.summary %}
+    {% set spend_delta = (s.total_spending - s.prev_total_spending) if s.prev_total_spending else None %}
+    {% set txns_delta = (s.total_transactions - s.prev_total_transactions) if s.prev_total_transactions else None %}
+
+    <div class="reports-stats" id="reportSummaryGrid" {% if not report.has_data %}hidden{% endif %}>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="wallet" class="stat-icon"></i></div>
+                <span class="stat-change negative">Spent</span>
+            </div>
+            <div class="stat-label">Total Spending</div>
+            <div class="stat-value" data-stat="totalSpending">₹{{ "%.2f"|format(s.total_spending) }}</div>
+            {% if spend_delta is not none and spend_delta != 0 %}
+            <div class="stat-delta" data-stat="totalSpendingDelta">
+                {{ '▲' if spend_delta > 0 else '▼' }} {{ "%.1f"|format((spend_delta / s.prev_total_spending * 100) if s.prev_total_spending else 0) }}% vs last period
+            </div>
+            {% else %}
+            <div class="stat-delta" data-stat="totalSpendingDelta">vs last period</div>
+            {% endif %}
+        </div>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="receipt" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Count</span>
+            </div>
+            <div class="stat-label">Total Transactions</div>
+            <div class="stat-value" data-stat="totalTransactions">{{ s.total_transactions }}</div>
+            {% if txns_delta is not none %}
+            <div class="stat-delta" data-stat="totalTransactionsDelta">
+                {{ '+' if txns_delta >= 0 else '' }}{{ txns_delta }} vs last period
+            </div>
+            {% else %}
+            <div class="stat-delta" data-stat="totalTransactionsDelta">vs last period</div>
+            {% endif %}
+        </div>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="calendar" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Avg</span>
+            </div>
+            <div class="stat-label">Average Monthly Spend</div>
+            <div class="stat-value" data-stat="avgMonthly">₹{{ "%.2f"|format(s.avg_monthly) }}</div>
+            <div class="stat-delta" data-stat="avgMonthlyDelta">per active month</div>
+        </div>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="trending-up" class="stat-icon"></i></div>
+                <span class="stat-change positive">Peak</span>
+            </div>
+            <div class="stat-label">Highest Spending Month</div>
+            <div class="stat-value stat-value-sm" data-stat="highestMonth">{{ s.highest_month_name }}</div>
+            <div class="stat-delta" data-stat="highestMonthDelta">
+                {{ '₹' ~ "%.2f"|format(s.highest_month_amount) if s.highest_month_amount > 0 else '—' }}
+            </div>
+        </div>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="zap" class="stat-icon"></i></div>
+                <span class="stat-change danger">Top</span>
+            </div>
+            <div class="stat-label">Largest Expense</div>
+            <div class="stat-value stat-value-sm" data-stat="largestExpense">
+                {{ '₹' ~ "%.2f"|format(s.largest_expense_amount) if s.largest_expense_amount > 0 else '—' }}
+            </div>
+            <div class="stat-delta" data-stat="largestExpenseDelta">{{ s.largest_expense_desc }} · {{ s.largest_expense_category }}</div>
+        </div>
+
+        <div class="stat-card report-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="piggy-bank" class="stat-icon"></i></div>
+                <span class="stat-change success">Save</span>
+            </div>
+            <div class="stat-label">Potential Savings</div>
+            <div class="stat-value" data-stat="savings">₹{{ "%.2f"|format(s.potential_savings) }}</div>
+            <div class="stat-delta" data-stat="savingsDelta">≈ 11% of total spend</div>
+        </div>
+
+    </div>
+
+    <!-- ============ Empty State ============ -->
+    <div class="report-empty" id="reportEmptyState" {% if report.has_data %}hidden{% endif %}>
+        <div class="report-empty-icon"><i data-lucide="bar-chart-3" width="48" height="48"></i></div>
+        <h2 class="report-empty-title">No report data</h2>
+        <p class="report-empty-text" id="reportEmptyText">No expenses match your current filters. Try widening the date range or clearing the filters.</p>
+        <a href="{{ url_for('reports') }}" class="btn-ghost" id="reportEmptyReset">Reset filters</a>
+    </div>
+
+    <!-- ============ Report Content ============ -->
+    <div id="reportContent" {% if not report.has_data %}hidden{% endif %}>
+
+    <!-- ============ Charts Layout ============ -->
+    <div class="reports-charts-layout">
+
+        <!-- Line chart -- spending trend (larger) -->
+        <div class="dashboard-card report-chart-card report-chart-wide">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="activity" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Spending Trends</h2>
+                </div>
+                <span class="activity-chip">Monthly</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton" data-chart-skeleton></div>
+                <div class="report-line-chart" data-line-chart hidden>
+                    <svg class="report-line-svg" viewBox="0 0 600 260" preserveAspectRatio="none" role="img" aria-label="Spending trend line chart">
+                        <defs>
+                            <linearGradient id="lineFill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="var(--accent)" stop-opacity="0.28"/>
+                                <stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+                        <g class="report-grid-lines"></g>
+                        <path class="report-line-area" d=""/>
+                        <path class="report-line-path" d=""/>
+                        <g class="report-line-dots"></g>
+                        <g class="report-line-labels"></g>
+                    </svg>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly comparison bar chart -->
+        <div class="dashboard-card report-chart-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="bar-chart-3" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Monthly Comparison</h2>
+                </div>
+                <span class="activity-chip">Current vs Prev</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton" data-chart-skeleton></div>
+                <div class="report-bars-chart" data-bars-chart hidden>
+                    <div class="report-bars" data-month-bars></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Category donut chart -->
+        <div class="dashboard-card report-chart-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">By Category</h2>
+                </div>
+                <span class="activity-chip">Share</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton" data-chart-skeleton></div>
+                <div class="report-donut-wrap" data-category-donut hidden>
+                    <div class="report-donut" data-category-donut-ring>
+                        <div class="report-donut-center">
+                            <span class="report-donut-total" data-category-donut-total>₹0</span>
+                            <span class="report-donut-label">Total spent</span>
+                        </div>
+                    </div>
+                    <ul class="report-legend" data-category-legend></ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Payment method donut chart -->
+        <div class="dashboard-card report-chart-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="credit-card" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">By Payment Method</h2>
+                </div>
+                <span class="activity-chip">Mix</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton" data-chart-skeleton></div>
+                <div class="report-donut-wrap" data-payment-donut hidden>
+                    <div class="report-donut" data-payment-donut-ring>
+                        <div class="report-donut-center">
+                            <span class="report-donut-total" data-payment-donut-total>₹0</span>
+                            <span class="report-donut-label">Total spent</span>
+                        </div>
+                    </div>
+                    <ul class="report-legend" data-payment-legend></ul>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============ Tables Layout ============ -->
+    <div class="reports-tables-layout">
+
+        <!-- Top Expenses Table -->
+        <div class="dashboard-card report-table-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="award" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Top Expenses</h2>
+                </div>
+                <span class="activity-chip">Largest</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton report-table-skeleton" data-chart-skeleton></div>
+                <div class="report-table-scroll" data-table hidden>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th>Payment</th>
+                                <th class="amount-col">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody data-top-expenses-body></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monthly Summary Table -->
+        <div class="dashboard-card report-table-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="calendar-range" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Monthly Summary</h2>
+                </div>
+                <span class="activity-chip">6 months</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="report-chart-skeleton report-table-skeleton" data-chart-skeleton></div>
+                <div class="report-table-scroll" data-table hidden>
+                    <table class="report-table">
+                        <thead>
+                            <tr>
+                                <th>Month</th>
+                                <th class="amount-col">Transactions</th>
+                                <th class="amount-col">Total</th>
+                                <th class="amount-col">Average</th>
+                            </tr>
+                        </thead>
+                        <tbody data-monthly-summary-body></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+    </div>
+    </div><!-- /reportContent -->
+
+    <!-- ============ Insights Cards ============ -->
+    <div class="reports-insights" {% if not report.has_data %}hidden{% endif %}>
+        <div class="reports-insights-title">
+            <i data-lucide="lightbulb" class="reports-insights-icon"></i>
+            <h2 class="reports-insights-heading">Insights</h2>
+        </div>
+        <div class="reports-insights-grid">
+
+            {% for insight in report.insights %}
+            <div class="insight-card">
+                <div class="insight-icon" style="--insight-accent: {{ insight.accent }};">
+                    <i data-lucide="{{ insight.icon }}"></i>
+                </div>
+                <div class="insight-body">
+                    <h3 class="insight-title">{{ insight.title }}</h3>
+                    <p class="insight-text">{{ insight.text }}</p>
+                </div>
+            </div>
+            {% endfor %}
+
+        </div>
+    </div>
+
+    <!-- ============ Quick Action Cards ============ -->
+    <div class="reports-quick">
+        <h3 class="reports-quick-title">Quick Actions</h3>
+        <div class="reports-quick-grid">
+            <a href="{{ url_for('list_expenses') }}" class="quick-action-card">
+                <div class="quick-action-icon" style="--qa-accent: var(--accent)">
+                    <i data-lucide="receipt"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Review Expenses</h4>
+                    <p class="quick-action-desc">Drill into the full ledger of transactions.</p>
+                </div>
+            </a>
+            <a href="{{ url_for('categories') }}" class="quick-action-card">
+                <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
+                    <i data-lucide="tags"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Manage Categories</h4>
+                    <p class="quick-action-desc">Organise and tune your spending categories.</p>
+                </div>
+            </a>
+            <a href="{{ url_for('categories_analytics') }}" class="quick-action-card">
+                <div class="quick-action-icon" style="--qa-accent: var(--success)">
+                    <i data-lucide="pie-chart"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Category Analytics</h4>
+                    <p class="quick-action-desc">Dive deeper into category-based insights.</p>
+                </div>
+            </a>
+            <a href="{{ url_for('transactions') }}" class="quick-action-card">
+                <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
+                    <i data-lucide="arrow-left-right"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Transactions</h4>
+                    <p class="quick-action-desc">Search, filter, and export your ledger.</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- ============ Export Toast ============ -->
+    <div class="report-toast" data-report-toast hidden>
+        <i data-lucide="check-circle" class="report-toast-icon"></i>
+        <span class="report-toast-text" data-report-toast-text>Report exported successfully</span>
+    </div>
+
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass server-rendered report data to the frontend renderer.
+    // URL builders are generated with url_for() so internal links are never hardcoded.
+    window.SPENDLY_REPORTS = {
+        report: {{ report | tojson }},
+        urls: {
+            expenses: {{ url_for('list_expenses') | tojson }},
+            transactions: {{ url_for('transactions') | tojson }},
+            categories: {{ url_for('categories') | tojson }}
+        }
+    };
+</script>
+<script src="{{ url_for('static', filename='js/reports.js') }}"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}
+

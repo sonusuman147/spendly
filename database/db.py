@@ -1234,6 +1234,489 @@ def delete_expenses_bulk(user_id, ids):
     return affected
 
 
+# ================================================================== #
+# Reports module — DB layer                                          #
+# ================================================================== #
+
+REPORT_PAYMENT_LABELS = {
+    "card": "Card",
+    "upi": "UPI",
+    "cash": "Cash",
+    "bank": "Bank",
+    "wallet": "Wallet",
+}
+
+REPORT_PAYMENT_COLORS = {
+    "card": "var(--cat-bills-text)",
+    "upi": "var(--cat-health-text)",
+    "cash": "var(--cat-other-text)",
+    "bank": "var(--cat-shopping-text)",
+    "wallet": "var(--cat-entertainment-text)",
+}
+
+REPORT_DEFAULT_MONTHS = 6
+
+
+def _build_report_filters(date_from, date_to, category, payment):
+    """Build WHERE-clause fragments and parameter list for report queries.
+
+    Returns (where_clauses, params) where params does NOT include user_id
+    (the caller prepends it). All bound via ``?`` placeholders.
+    """
+    clauses = ["user_id = ?"]
+    params = []
+
+    if date_from:
+        clauses.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date <= ?")
+        params.append(date_to)
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if payment:
+        clauses.append("payment_method = ?")
+        params.append(payment)
+
+    return clauses, params
+
+
+def _compute_period_range(months_back):
+    """Return (start_date, end_date) ISO strings for the last N months."""
+    today = date.today()
+    end = today.isoformat()
+    month = today.month - months_back
+    year = today.year
+    while month < 1:
+        month += 12
+        year -= 1
+    from datetime import date as dt_date
+    start = dt_date(year, month, 1).isoformat()
+    return start, end
+
+
+def get_report_data(user_id, date_from=None, date_to=None, category=None,
+                    payment=None, months=REPORT_DEFAULT_MONTHS):
+    """Compute full report data for a user with optional filtering.
+
+    When date_from/date_to are not provided, defaults to the last ``months``
+    months (default 6). Supports optional category and payment method filters.
+
+    Returns a dict with:
+      - summary: {total_spending, total_transactions, avg_monthly,
+                  highest_month_name, highest_month_amount,
+                  largest_expense_amount, largest_expense_desc,
+                  largest_expense_category, potential_savings,
+                  prev_total_spending, prev_total_transactions}
+      - monthly_trend: list of {month, label, amount} for each month
+        in the period (chronological)
+      - prev_monthly_trend: list of {month, label, amount} for the
+        previous period of the same length (for comparison)
+      - category_breakdown: list of {name, color, value} ordered by
+        value descending
+      - payment_breakdown: list of {name, color, value} ordered by
+        value descending
+      - top_expenses: list of {id, date, description, category,
+        payment_method, amount} ordered by amount descending (limit 10)
+      - monthly_summary: list of {month_label, transaction_count,
+        total, average} ordered chronologically
+      - insights: list of {icon, accent, title, text}
+      - filter_info: {date_from, date_to, category, payment}
+    """
+    # Default date range = last N months.
+    if not date_from and not date_to:
+        date_from, date_to = _compute_period_range(months)
+
+    clauses, params = _build_report_filters(date_from, date_to, category, payment)
+    where = " AND ".join(clauses)
+    full_params = [user_id] + params
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # ---- Summary cards ----
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_spending, "
+        "COUNT(*) AS total_transactions "
+        f"FROM expenses WHERE {where}",
+        tuple(full_params),
+    )
+    cur_totals = dict(cursor.fetchone())
+
+    total_spending = round(cur_totals["total_spending"], 2)
+    total_transactions = cur_totals["total_transactions"]
+
+    # Average monthly spend.
+    cursor.execute(
+        "SELECT COUNT(DISTINCT strftime('%Y-%m', date)) AS month_count "
+        f"FROM expenses WHERE {where}",
+        tuple(full_params),
+    )
+    month_count = max(cursor.fetchone()["month_count"], 1)
+    avg_monthly = round(total_spending / month_count, 2) if month_count else 0.0
+
+    # Highest spending month.
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, "
+        "COALESCE(SUM(amount), 0.0) AS total "
+        f"FROM expenses WHERE {where} "
+        "GROUP BY month ORDER BY total DESC LIMIT 1",
+        tuple(full_params),
+    )
+    highest_row = cursor.fetchone()
+    if highest_row and highest_row["total"] > 0:
+        ym = highest_row["month"]
+        parts = ym.split("-")
+        month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        highest_month_name = f"{month_names[int(parts[1])]} {parts[0]}"
+        highest_month_amount = round(highest_row["total"], 2)
+    else:
+        highest_month_name = "—"
+        highest_month_amount = 0.0
+
+    # Largest single expense.
+    cursor.execute(
+        "SELECT amount, description, category "
+        f"FROM expenses WHERE {where} "
+        "ORDER BY amount DESC LIMIT 1",
+        tuple(full_params),
+    )
+    largest = cursor.fetchone()
+    largest_expense = dict(largest) if largest else None
+    largest_expense_amount = round(largest_expense["amount"], 2) if largest_expense else 0.0
+    largest_expense_desc = largest_expense["description"] or "—" if largest_expense else "—"
+    largest_expense_category = largest_expense["category"] if largest_expense else "—"
+
+    # Potential savings: 11% of total (static heuristic).
+    potential_savings = round(total_spending * 0.11, 2)
+
+    # ---- Previous period (for comparison) ----
+    prev_from, prev_to = _compute_prev_period(date_from, date_to, months)
+    prev_clauses, prev_params = _build_report_filters(prev_from, prev_to, category, payment)
+    prev_where = " AND ".join(prev_clauses)
+    prev_full_params = [user_id] + prev_params
+
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count "
+        f"FROM expenses WHERE {prev_where}",
+        tuple(prev_full_params),
+    )
+    prev_totals = dict(cursor.fetchone())
+    prev_total_spending = round(prev_totals["total"], 2)
+    prev_total_transactions = prev_totals["count"]
+
+    # ---- Monthly trend (current period, chronological) ----
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, "
+        "COALESCE(SUM(amount), 0.0) AS amount "
+        f"FROM expenses WHERE {where} "
+        "GROUP BY month ORDER BY month ASC",
+        tuple(full_params),
+    )
+    monthly_trend = []
+    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    for row in cursor.fetchall():
+        parts = row["month"].split("-")
+        label = f"{month_names[int(parts[1])]} {parts[0]}"
+        monthly_trend.append({
+            "month": row["month"],
+            "label": label,
+            "amount": round(row["amount"], 2),
+        })
+
+    # ---- Previous period monthly trend ----
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, "
+        "COALESCE(SUM(amount), 0.0) AS amount "
+        f"FROM expenses WHERE {prev_where} "
+        "GROUP BY month ORDER BY month ASC",
+        tuple(prev_full_params),
+    )
+    prev_monthly_trend = []
+    for row in cursor.fetchall():
+        parts = row["month"].split("-")
+        label = f"{month_names[int(parts[1])]} {parts[0]}"
+        prev_monthly_trend.append({
+            "month": row["month"],
+            "label": label,
+            "amount": round(row["amount"], 2),
+        })
+
+    # ---- Category breakdown (with colors from categories table) ----
+    cursor.execute(
+        "SELECT e.category AS name, "
+        "COALESCE((SELECT color FROM categories WHERE user_id = e.user_id AND name = e.category), '#6b7280') AS color, "
+        "COALESCE(SUM(e.amount), 0.0) AS value "
+        f"FROM expenses e WHERE {where} "
+        "GROUP BY e.category ORDER BY value DESC",
+        tuple(full_params),
+    )
+    category_breakdown = []
+    for row in cursor.fetchall():
+        category_breakdown.append({
+            "name": row["name"],
+            "color": row["color"],
+            "value": round(row["value"], 2),
+        })
+
+    # ---- Payment method breakdown ----
+    cursor.execute(
+        "SELECT payment_method, COALESCE(SUM(amount), 0.0) AS value "
+        f"FROM expenses WHERE {where} "
+        "GROUP BY payment_method ORDER BY value DESC",
+        tuple(full_params),
+    )
+    payment_breakdown = []
+    for row in cursor.fetchall():
+        pm = row["payment_method"]
+        payment_breakdown.append({
+            "name": REPORT_PAYMENT_LABELS.get(pm, pm.capitalize()),
+            "color": REPORT_PAYMENT_COLORS.get(pm, "var(--ink-muted)"),
+            "value": round(row["value"], 2),
+        })
+
+    # ---- Top expenses (by amount, limit 10) ----
+    cursor.execute(
+        "SELECT id, date, description, category, payment_method, amount "
+        f"FROM expenses WHERE {where} "
+        "ORDER BY amount DESC LIMIT 10",
+        tuple(full_params),
+    )
+    top_expenses = []
+    for row in cursor.fetchall():
+        top_expenses.append({
+            "id": row["id"],
+            "date": row["date"],
+            "description": row["description"] or "",
+            "category": row["category"],
+            "payment_method": row["payment_method"],
+            "amount": round(row["amount"], 2),
+        })
+
+    # ---- Monthly summary table (chronological) ----
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, "
+        "COUNT(*) AS transaction_count, "
+        "COALESCE(SUM(amount), 0.0) AS total, "
+        "COALESCE(AVG(amount), 0.0) AS average "
+        f"FROM expenses WHERE {where} "
+        "GROUP BY month ORDER BY month ASC",
+        tuple(full_params),
+    )
+    monthly_summary = []
+    for row in cursor.fetchall():
+        parts = row["month"].split("-")
+        label = f"{month_names[int(parts[1])]} {parts[0]}"
+        monthly_summary.append({
+            "month_label": label,
+            "transaction_count": row["transaction_count"],
+            "total": round(row["total"], 2),
+            "average": round(row["average"], 2),
+        })
+
+    conn.close()
+
+    # ---- Insights (data-driven) ----
+    insights = _compute_insights(
+        total_spending, prev_total_spending,
+        total_transactions, prev_total_transactions,
+        avg_monthly, highest_month_name, highest_month_amount,
+        largest_expense_amount, largest_expense_desc,
+        largest_expense_category, potential_savings,
+        category_breakdown, monthly_trend,
+    )
+
+    # Whether any expenses matched the current filters (drives the empty state).
+    has_data = total_transactions > 0
+
+    return {
+        "summary": {
+            "total_spending": total_spending,
+            "total_transactions": total_transactions,
+            "avg_monthly": avg_monthly,
+            "highest_month_name": highest_month_name,
+            "highest_month_amount": highest_month_amount,
+            "largest_expense_amount": largest_expense_amount,
+            "largest_expense_desc": largest_expense_desc,
+            "largest_expense_category": largest_expense_category,
+            "potential_savings": potential_savings,
+            "prev_total_spending": prev_total_spending,
+            "prev_total_transactions": prev_total_transactions,
+        },
+        "monthly_trend": monthly_trend,
+        "prev_monthly_trend": prev_monthly_trend,
+        "category_breakdown": category_breakdown,
+        "payment_breakdown": payment_breakdown,
+        "top_expenses": top_expenses,
+        "monthly_summary": monthly_summary,
+        "insights": insights,
+        "has_data": has_data,
+        "filter_info": {
+            "date_from": date_from,
+            "date_to": date_to,
+            "category": category or "",
+            "payment": payment or "",
+        },
+    }
+
+
+def _compute_prev_period(date_from, date_to, months):
+    """Return (prev_from, prev_to) ISO strings shifting the period back by ``months``."""
+    if not date_from and not date_to:
+        # Default period: shift back by months.
+        p_from, p_to = _compute_period_range(months * 2)
+        # p_from is (months*2) back, p_to is months back.
+        # We need the period [months_back .. 0) from p_to's perspective.
+        # Simpler: shift the default range back.
+        today = date.today()
+        end_month = today.month - months
+        end_year = today.year
+        while end_month < 1:
+            end_month += 12
+            end_year -= 1
+        from datetime import date as dt_date
+        import calendar
+        last_day = calendar.monthrange(end_year, end_month)[1]
+        prev_to = dt_date(end_year, end_month, last_day).isoformat()
+
+        start_month = end_month - months + 1
+        start_year = end_year
+        while start_month < 1:
+            start_month += 12
+            start_year -= 1
+        prev_from = dt_date(start_year, start_month, 1).isoformat()
+        return prev_from, prev_to
+
+    # Custom dates: shift both back by the same span.
+    try:
+        from datetime import datetime as dt_parse, timedelta
+        d_from = dt_parse.strptime(date_from, "%Y-%m-%d").date()
+        d_to = dt_parse.strptime(date_to, "%Y-%m-%d").date()
+        span = (d_to - d_from).days + 1
+        prev_to = d_from - timedelta(days=1)
+        prev_from = prev_to - timedelta(days=span - 1)
+        return prev_from.isoformat(), prev_to.isoformat()
+    except (ValueError, TypeError):
+        # Fallback: shift both by months.
+        today = date.today()
+        end_month = today.month - months
+        end_year = today.year
+        while end_month < 1:
+            end_month += 12
+            end_year -= 1
+        import calendar
+        last_day = calendar.monthrange(end_year, end_month)[1]
+        prev_to = date(end_year, end_month, last_day).isoformat()
+        start_month = end_month - months + 1
+        start_year = end_year
+        while start_month < 1:
+            start_month += 12
+            start_year -= 1
+        prev_from = date(start_year, start_month, 1).isoformat()
+        return prev_from, prev_to
+
+
+def _compute_insights(total_spending, prev_total_spending,
+                      total_transactions, prev_total_transactions,
+                      avg_monthly, highest_month_name, highest_month_amount,
+                      largest_expense_amount, largest_expense_desc,
+                      largest_expense_category, potential_savings,
+                      category_breakdown, monthly_trend):
+    """Generate data-driven insight cards for the Reports page.
+
+    Returns a list of dicts with keys: icon, accent (CSS var), title, text.
+    """
+    insights = []
+
+    # 1. Spending trend insight.
+    if prev_total_spending > 0 and total_spending > 0:
+        pct_change = round((total_spending - prev_total_spending) / prev_total_spending * 100, 1)
+        if pct_change < 0:
+            insights.append({
+                "icon": "trending-down",
+                "accent": "var(--accent)",
+                "title": f"Spending decreased by {abs(pct_change)}%",
+                "text": f"Your spending dropped from ₹{prev_total_spending:,.2f} to ₹{total_spending:,.2f} compared to the previous period. Keep it up!",
+            })
+        elif pct_change > 0:
+            insights.append({
+                "icon": "trending-up",
+                "accent": "var(--danger)",
+                "title": f"Spending increased by {pct_change}%",
+                "text": f"Your spending rose from ₹{prev_total_spending:,.2f} to ₹{total_spending:,.2f}. Review your expenses to identify areas to cut back.",
+            })
+        else:
+            insights.append({
+                "icon": "minus",
+                "accent": "var(--ink-muted)",
+                "title": "Spending held steady",
+                "text": f"Your spending of ₹{total_spending:,.2f} matches the previous period. Consistency is key!",
+            })
+    else:
+        insights.append({
+            "icon": "bar-chart-3",
+            "accent": "var(--accent)",
+            "title": "Start tracking to see trends",
+            "text": "Add expenses to unlock spending insights and trends over time.",
+        })
+
+    # 2. Top category insight.
+    if category_breakdown:
+        top_cat = category_breakdown[0]
+        top_pct = round(top_cat["value"] / total_spending * 100, 1) if total_spending > 0 else 0
+        insights.append({
+            "icon": "shopping-bag",
+            "accent": "var(--accent-2)",
+            "title": f"{top_cat['name']} is your top category",
+            "text": f"{top_cat['name']} accounts for {top_pct}% of total spend at ₹{top_cat['value']:,.2f}. Trimming 10% here could save ~₹{round(top_cat['value'] * 0.1, 2):,.2f}.",
+        })
+    else:
+        insights.append({
+            "icon": "shopping-bag",
+            "accent": "var(--accent-2)",
+            "title": "No category data yet",
+            "text": "Add expenses across different categories to see your spending breakdown here.",
+        })
+
+    # 3. Savings opportunity insight.
+    if potential_savings > 0:
+        pct_of_total = round(potential_savings / total_spending * 100, 1) if total_spending > 0 else 0
+        insights.append({
+            "icon": "piggy-bank",
+            "accent": "var(--success)",
+            "title": f"Potential savings of ₹{potential_savings:,.2f}",
+            "text": f"By optimising recurring expenses and setting category budgets, you could save ~{pct_of_total}% of your total spend (≈₹{round(potential_savings / avg_monthly if avg_monthly > 0 else 1, 0):,.0f}/month).",
+        })
+    else:
+        insights.append({
+            "icon": "piggy-bank",
+            "accent": "var(--success)",
+            "title": "Track to unlock savings insights",
+            "text": "Once you have enough expense data, we'll show personalised saving opportunities.",
+        })
+
+    # 4. Peak month insight.
+    if highest_month_name != "—" and highest_month_amount > 0:
+        insights.append({
+            "icon": "calendar-check",
+            "accent": "var(--bar-bills)",
+            "title": f"{highest_month_name} was your peak month",
+            "text": f"Your highest spending month was {highest_month_name} at ₹{highest_month_amount:,.2f}. Large one-off purchases can skew your monthly averages.",
+        })
+    else:
+        insights.append({
+            "icon": "calendar-check",
+            "accent": "var(--bar-bills)",
+            "title": "Track monthly to find patterns",
+            "text": "Add expenses regularly so we can identify your peak spending months.",
+        })
+
+    return insights
+
+
 def add_activity(user_id, action, expense_id=None, category=None,
                  description=None, amount=None):
     """Record an activity entry for the Recent Activity feed.
