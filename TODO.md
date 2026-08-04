@@ -20,3 +20,12 @@ Scope: **Frontend only**. Do NOT modify backend, routes, DB, auth, or business l
 - The `.claude/commands/create-specs.md` file does not exist; the actual command file is `.claude/commands/create-spec.md` (git feature-branch/spec workflow). It was read and its context applied (frontend-only, use CSS variables, Lucide icons, all templates extend base.html, preserve backend).
 - `_diag.py` diagnostic script has been deleted (`Remove-Item _diag.py` — `Test-Path` returned `False`).
 
+## Reports Page (Spec 11) — Implemented & Verified
+
+- [x] Backend route `GET /reports` in `app.py` — auth-protected (unauthenticated → 302), filter parsing (date range, category, payment method), sources categories from user's categories table, calls `get_report_data()` with all filters, passes `report`, `categories`, `payment_methods`, `filters`, `query_args`, `has_active_filters` to `reports.html`.
+- [x] Template `templates/reports.html` — page header with Generate Report / Export PDF / Export Excel buttons; six summary cards (Total Spending, Total Transactions, Average Monthly Spend, Highest Spending Month, Largest Expense, Potential Savings) with deltas; filter bar; Spending Trends line chart, Monthly Comparison bar chart, By Category donut, By Payment Method donut; Top Expenses table; Monthly Summary table; insights cards; quick-action cards; empty state; export toast. All wired to real DB data via `window.SPENDLY_REPORTS.report`.
+- [x] JS `static/js/reports.js` — fixed `ReferenceError` (line chart used undeclared `labels` instead of `labelsGroup`/`monthLabels`); replaced `exportPdf` CSV logic with a real dependency-free PDF generator; made `revealSkeletons()` robust (pair each skeleton to its target, all siblings within `.dashboard-card-body`); loading skeletons resolve into charts/tables; charts/tables consume real DB data only.
+- [x] CSS `static/css/reports.css` — added styles for `.filter-input`, `.filter-select`, `.txn-filter-field`, `.txn-filter-label`, `.filter-apply-btn`, `.filter-reset-btn`, `.filter-result-count` to match the Spendly design system, including theme-aware native date-picker indicator (dark/light).
+- [x] Sidebar Reports link already enabled in `base.html` (no change needed).
+- [x] Verification — real DB data flows through `get_report_data()` (demo user: total 5300, 4 txns, category + payment breakdowns, top expenses, monthly summary, insights); authenticated `/reports` returns 200 with all sections; unauthenticated → 302; 104 tests pass (`python -m pytest -q`).
+

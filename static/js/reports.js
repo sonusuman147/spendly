@@ -84,17 +84,34 @@
     /* Loading skeletons → reveal content                                  */
     /* ------------------------------------------------------------------ */
 
-    function revealSkeletons() {
+function revealSkeletons() {
         var skeletons = getAll('[data-chart-skeleton]');
         skeletons.forEach(function (skel) {
+            // Always hide the skeleton. The `[hidden]` rule in reports.css
+            // forces display:none even though the skeleton owns display:flex.
+            skel.hidden = true;
+            skel.classList.add('is-hidden');
+
             var parent = skel.parentElement;
             var target = null;
             if (parent) {
                 target = parent.querySelector('[data-line-chart], [data-bars-chart], [data-category-donut], [data-payment-donut], [data-table]');
             }
             if (target) {
-                skel.hidden = true;
                 target.hidden = false;
+            }
+        });
+    }
+
+    // Hide any chart/table container that ended up with no renderable data so
+    // it does not leave a large blank area inside the card. The card header
+    // stays visible; the empty body collapses cleanly.
+    function collapseEmptyContainers() {
+        var containers = getAll('[data-line-chart], [data-bars-chart], [data-category-donut], [data-payment-donut], [data-table]');
+        containers.forEach(function (container) {
+            var isEmpty = !container.querySelector('.report-line-svg, .report-bar-col, .report-legend-item, tbody tr');
+            if (isEmpty) {
+                container.hidden = true;
             }
         });
     }
@@ -425,16 +442,123 @@
         URL.revokeObjectURL(link.href);
     }
 
-    function exportPdf() {
-        var rows = monthlySummary.map(function (m) {
-            return [m.month_label, m.transaction_count, m.total.toFixed(2), m.average.toFixed(2)];
+/* ------------------------------------------------------------------ */
+    /* Minimal PDF generator (no dependencies)                            */
+    /* Produces a valid single-page PDF with Helvetica text.              */
+    /* ------------------------------------------------------------------ */
+
+    function pdfEscape(s) {
+        return String(s == null ? '' : s)
+            .replace(/\\/g, '\\\\')
+            .replace(/\(/g, '\\(')
+            .replace(/\)/g, '\\)')
+            .replace(/[\r\n]/g, ' ');
+    }
+
+    // Returns a Blob containing a valid PDF document built from the report.
+    function buildReportPdf() {
+        var lines = [
+            'Spendly Report',
+            'Generated ' + new Date().toLocaleDateString('en-IN'),
+            '',
+            'SUMMARY',
+            'Total Spending: Rs.' + money(summary.total_spending),
+            'Total Transactions: ' + summary.total_transactions,
+            'Average Monthly Spend: Rs.' + money(summary.avg_monthly),
+            'Highest Spending Month: ' + (summary.highest_month_name || '—'),
+            'Largest Expense: Rs.' + money(summary.largest_expense_amount),
+            'Potential Savings: Rs.' + money(summary.potential_savings),
+            '',
+            'MONTHLY SUMMARY',
+        ];
+
+        monthlySummary.forEach(function (m) {
+            lines.push(
+                m.month_label + '  |  Txns: ' + m.transaction_count +
+                '  |  Total: Rs.' + m.total.toFixed(2) +
+                '  |  Avg: Rs.' + m.average.toFixed(2)
+            );
         });
-        exportCSV(
-            rows,
-            ['Month', 'Transactions', 'Total', 'Average'],
-            'spendly-report-' + new Date().toISOString().slice(0, 10) + '.csv'
+
+        if (!monthlySummary.length) {
+            lines.push('No monthly data for this period.');
+        }
+
+        lines.push('', 'TOP EXPENSES');
+        if (topExpenses.length) {
+            topExpenses.forEach(function (e) {
+                lines.push(
+                    e.date + '  |  ' + (e.description || 'No description') +
+                    '  |  ' + e.category +
+                    '  |  ' + (payLabels[e.payment_method] || e.payment_method) +
+                    '  |  Rs.' + e.amount.toFixed(2)
+                );
+            });
+        } else {
+            lines.push('No expenses to show.');
+        }
+
+        // Build the PDF content stream. Each line is drawn with Helvetica 10.
+        var y = 740;
+        var content = 'BT /F1 12 Tf 50 760 Td (Spendly Report) Tj ET\n';
+        y -= 20;
+        content += 'BT /F1 9 Tf 50 ' + y + ' Td (Generated ' +
+            pdfEscape(new Date().toLocaleDateString('en-IN')) + ') Tj ET\n';
+        y -= 24;
+
+        lines.forEach(function (line) {
+            if (y < 40) {
+                // Wrap to a second page would be ideal; clamp to keep it simple.
+                y = 40;
+            }
+            content += 'BT /F1 9 Tf 50 ' + y + ' Td (' + pdfEscape(line) + ') Tj ET\n';
+            y -= 16;
+        });
+
+        var stream = content;
+        var objects = [];
+        objects.push('<< /Type /Catalog /Pages 2 0 R >>');
+        objects.push('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+        objects.push('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>');
+        objects.push('<< /Length ' + stream.length + ' >>\nstream\n' + stream + '\nendstream');
+        objects.push('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+
+        var pdf = '%PDF-1.4\n';
+        var offsets = [];
+        var idx;
+        for (idx = 0; idx < objects.length; idx++) {
+            offsets.push(pdf.length);
+            pdf += (idx + 1) + ' 0 obj\n' + objects[idx] + '\nendobj\n';
+        }
+
+        var xrefStart = pdf.length;
+        pdf += 'xref\n0 ' + (objects.length + 1) + '\n';
+        pdf += '0000000000 65535 f \n';
+        offsets.forEach(function (off) {
+            pdf += ('0000000000' + off).slice(-10) + ' 00000 n \n';
+        });
+        pdf += 'trailer\n<< /Size ' + (objects.length + 1) + ' /Root 1 0 R >>\n';
+        pdf += 'startxref\n' + xrefStart + '\n%%EOF';
+
+        return new Blob([pdf], { type: 'application/pdf' });
+    }
+
+    function downloadBlob(blob, filename) {
+        var link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    }
+
+    function exportPdf() {
+        downloadBlob(
+            buildReportPdf(),
+            'spendly-report-' + new Date().toISOString().slice(0, 10) + '.pdf'
         );
-        showToast('Report exported as PDF (CSV-compatible)');
+        showToast('Report exported as PDF');
     }
 
     function exportExcel() {
@@ -478,7 +602,7 @@
             return;
         }
 
-        // Simulate initial load: show skeletons briefly, then render charts.
+// Simulate initial load: show skeletons briefly, then render charts.
         setTimeout(function () {
             revealSkeletons();
             buildLineChart();
@@ -486,6 +610,7 @@
             buildDonut('[data-category-donut-ring]', '[data-category-donut-total]', '[data-category-legend]', categoryData);
             buildDonut('[data-payment-donut-ring]', '[data-payment-donut-total]', '[data-payment-legend]', paymentData);
             buildTables();
+            collapseEmptyContainers();
             refreshIcons();
         }, 700);
     }
