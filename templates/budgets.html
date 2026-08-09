@@ -1,0 +1,361 @@
+{% extends "base.html" %}
+
+{% block title %}Budgets — Spendly{% endblock %}
+
+{% block page_title %}Budgets{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Budgets</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/budgets.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="budgets-section">
+
+    <!-- ============ Page Header ============ -->
+    <div class="budgets-header">
+        <div class="budgets-header-copy">
+            <h1 class="budgets-title">Budgets</h1>
+            <p class="budgets-subtitle">Plan your spending, track your limits, and stay on top of every rupee.</p>
+        </div>
+        <div class="budgets-header-actions">
+            <button type="button" class="btn-budget" data-budget-create>
+                <i data-lucide="plus" width="18" height="18"></i>
+                Create Budget
+            </button>
+            <button type="button" class="btn-export" data-export-pdf title="Download budgets as PDF">
+                <i data-lucide="file-text" width="18" height="18"></i>
+                Export PDF
+            </button>
+            <button type="button" class="btn-export" data-export-excel title="Download budgets as Excel">
+                <i data-lucide="file-spreadsheet" width="18" height="18"></i>
+                Export Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- ============ Filter Bar ============ -->
+    <form class="budgets-filter-bar" id="budgetFilterForm">
+        <div class="budgets-filter-grid">
+            <label class="bgt-filter-field">
+                <span class="bgt-filter-label">Month</span>
+                <select name="month" id="budgetMonth" class="filter-select">
+                    <option value="all">All months</option>
+                    <option value="jan">January</option>
+                    <option value="feb">February</option>
+                    <option value="mar">March</option>
+                    <option value="apr">April</option>
+                    <option value="may">May</option>
+                    <option value="jun">June</option>
+                    <option value="jul">July</option>
+                    <option value="aug">August</option>
+                    <option value="sep">September</option>
+                    <option value="oct">October</option>
+                    <option value="nov">November</option>
+                    <option value="dec">December</option>
+                </select>
+            </label>
+            <label class="bgt-filter-field">
+                <span class="bgt-filter-label">Category</span>
+                <select name="category" id="budgetCategory" class="filter-select">
+                    <option value="all">All categories</option>
+                    <option value="food" data-cat="food">Food &amp; Dining</option>
+                    <option value="transport" data-cat="transport">Transport</option>
+                    <option value="bills" data-cat="bills">Bills &amp; Utilities</option>
+                    <option value="health" data-cat="health">Health</option>
+                    <option value="entertainment" data-cat="entertainment">Entertainment</option>
+                    <option value="shopping" data-cat="shopping">Shopping</option>
+                </select>
+            </label>
+            <label class="bgt-filter-field">
+                <span class="bgt-filter-label">Status</span>
+                <select name="status" id="budgetStatus" class="filter-select">
+                    <option value="all">All statuses</option>
+                    <option value="on-track">On Track</option>
+                    <option value="warning">At Risk</option>
+                    <option value="over">Over Budget</option>
+                </select>
+            </label>
+        </div>
+        <div class="budgets-filter-footer">
+            <span class="filter-result-count" id="budgetResultCount">Showing all budgets</span>
+            <div class="budgets-filter-actions">
+                <button type="button" class="filter-reset-btn" id="budgetFilterReset">
+                    <i data-lucide="rotate-ccw" width="14" height="14"></i>
+                    Reset
+                </button>
+                <button type="submit" class="filter-apply-btn">
+                    <i data-lucide="filter" width="14" height="14"></i>
+                    Apply
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- ============ Summary Cards (4) ============ -->
+    <div class="budgets-stats" id="budgetSummaryGrid">
+        <div class="stat-card bgt-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="wallet" class="stat-icon"></i></div>
+                <span class="stat-change positive">Limit</span>
+            </div>
+            <div class="stat-label">Monthly Budget</div>
+            <div class="stat-value" data-stat="totalBudget">₹0</div>
+            <div class="stat-delta">across 6 active budgets</div>
+        </div>
+        <div class="stat-card bgt-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="receipt" class="stat-icon"></i></div>
+                <span class="stat-change negative">Spent</span>
+            </div>
+            <div class="stat-label">Total Spent</div>
+            <div class="stat-value" data-stat="totalSpent">₹0</div>
+            <div class="stat-delta" data-stat="spentPct">0% of budget used</div>
+        </div>
+        <div class="stat-card bgt-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="piggy-bank" class="stat-icon"></i></div>
+                <span class="stat-change success">Left</span>
+            </div>
+            <div class="stat-label">Remaining</div>
+            <div class="stat-value" data-stat="remaining">₹0</div>
+            <div class="stat-delta" data-stat="daily">₹0 / day left</div>
+        </div>
+        <div class="stat-card bgt-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="calendar" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Active</span>
+            </div>
+            <div class="stat-label">Over Budget</div>
+            <div class="stat-value stat-value-sm" data-stat="overCount">0</div>
+            <div class="stat-delta">budgets need attention</div>
+        </div>
+    </div>
+
+    <!-- ============ Budget Progress Cards ============ -->
+    <div class="budget-progress-section">
+        <div class="budget-section-head">
+            <div class="budget-section-title">
+                <i data-lucide="gauge" class="budget-section-icon"></i>
+                <h2 class="budget-section-heading">Budget Progress</h2>
+            </div>
+            <span class="activity-chip">This month</span>
+        </div>
+        <div class="budget-progress-grid" id="budgetProgressGrid">
+            <!-- Cards rendered by budgets.js -->
+        </div>
+    </div>
+
+    <!-- ============ Charts Layout ============ -->
+    <div class="budgets-charts-layout">
+
+        <!-- Budget vs Actual bar chart -->
+        <div class="dashboard-card budget-chart-card budget-chart-wide">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="bar-chart-3" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Budget vs Actual</h2>
+                </div>
+                <span class="activity-chip">Monthly</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="budget-chart-skeleton" data-chart-skeleton></div>
+                <div class="budget-bars-chart" data-bars-chart hidden>
+                    <div class="budget-bars" data-budget-bars></div>
+                    <div class="report-bars-legend">
+                        <span class="report-bars-legend-item"><span class="report-bars-legend-dot"></span>Budget</span>
+                        <span class="report-bars-legend-item"><span class="report-bars-legend-dot is-prev"></span>Actual</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Budget Distribution donut -->
+        <div class="dashboard-card budget-chart-card">
+            <div class="dashboard-card-header">
+                <div class="dashboard-card-heading">
+                    <i data-lucide="pie-chart" class="dashboard-card-icon"></i>
+                    <h2 class="dashboard-card-title">Budget Distribution</h2>
+                </div>
+                <span class="activity-chip">Share</span>
+            </div>
+            <div class="dashboard-card-body">
+                <div class="budget-chart-skeleton" data-chart-skeleton></div>
+                <div class="budget-donut-wrap" data-category-donut hidden>
+                    <div class="report-donut" data-category-donut-ring>
+                        <div class="report-donut-center">
+                            <span class="report-donut-total" data-category-donut-total>₹0</span>
+                            <span class="report-donut-label">Total budget</span>
+                        </div>
+                    </div>
+                    <ul class="report-legend" data-category-legend></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Budget Overview Table ============ -->
+    <div class="dashboard-card budget-table-card">
+        <div class="dashboard-card-header">
+            <div class="dashboard-card-heading">
+                <i data-lucide="table-2" class="dashboard-card-icon"></i>
+                <h2 class="dashboard-card-title">Budget Overview</h2>
+            </div>
+            <span class="activity-chip">All budgets</span>
+        </div>
+        <div class="dashboard-card-body">
+            <div class="budget-chart-skeleton budget-table-skeleton" data-chart-skeleton></div>
+            <div class="budget-table-scroll" data-budget-table hidden>
+                <table class="budget-table">
+                    <thead>
+                        <tr>
+                            <th>Budget</th>
+                            <th>Period</th>
+                            <th class="amount-col">Allocated</th>
+                            <th class="amount-col">Spent</th>
+                            <th class="amount-col">Remaining</th>
+                            <th>Progress</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody data-budget-table-body></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Alerts & Insights ============ -->
+    <div class="budgets-insights" id="budgetAlerts">
+        <div class="reports-insights-title">
+            <i data-lucide="lightbulb" class="reports-insights-icon"></i>
+            <h2 class="reports-insights-heading">Alerts &amp; Insights</h2>
+        </div>
+        <div class="reports-insights-grid" data-alerts-grid>
+            <!-- Alerts rendered by budgets.js -->
+        </div>
+    </div>
+
+    <!-- ============ Recent Budget Activity Timeline ============ -->
+    <div class="dashboard-card budget-activity-card">
+        <div class="dashboard-card-header">
+            <div class="dashboard-card-heading">
+                <i data-lucide="history" class="dashboard-card-icon"></i>
+                <h2 class="dashboard-card-title">Recent Budget Activity</h2>
+            </div>
+            <span class="activity-chip">Timeline</span>
+        </div>
+        <div class="dashboard-card-body">
+            <ol class="budget-timeline" data-budget-timeline>
+                <!-- Timeline items rendered by budgets.js -->
+            </ol>
+        </div>
+    </div>
+
+    <!-- ============ Quick Actions ============ -->
+    <div class="budgets-quick">
+        <h3 class="reports-quick-title">Quick Actions</h3>
+        <div class="reports-quick-grid">
+            <a href="#" class="quick-action-card" data-quick-action>
+                <div class="quick-action-icon" style="--qa-accent: var(--accent)">
+                    <i data-lucide="plus"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Create Budget</h4>
+                    <p class="quick-action-desc">Set a new monthly spending limit.</p>
+                </div>
+            </a>
+            <a href="#" class="quick-action-card" data-quick-action>
+                <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
+                    <i data-lucide="pencil"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Adjust Limit</h4>
+                    <p class="quick-action-desc">Tune a budget to match your goals.</p>
+                </div>
+            </a>
+            <a href="#" class="quick-action-card" data-quick-action>
+                <div class="quick-action-icon" style="--qa-accent: var(--success)">
+                    <i data-lucide="repeat"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Roll Over</h4>
+                    <p class="quick-action-desc">Carry unused budget into next month.</p>
+                </div>
+            </a>
+            <a href="#" class="quick-action-card" data-quick-action>
+                <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
+                    <i data-lucide="file-text"></i>
+                </div>
+                <div class="quick-action-body">
+                    <h4 class="quick-action-name">Export Report</h4>
+                    <p class="quick-action-desc">Download your budget summary.</p>
+                </div>
+            </a>
+        </div>
+    </div>
+
+    <!-- ============ Demo Modal (Create Budget) ============ -->
+    <div class="txn-modal budget-modal" data-budget-modal hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title">Create Budget</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body">
+                <form id="budgetCreateForm">
+                    <div class="bgt-form-grid">
+                        <label class="bgt-filter-field">
+                            <span class="bgt-filter-label">Category</span>
+                            <select class="filter-select" required>
+                                <option value="food">Food &amp; Dining</option>
+                                <option value="transport">Transport</option>
+                                <option value="bills">Bills &amp; Utilities</option>
+                                <option value="health">Health</option>
+                                <option value="entertainment">Entertainment</option>
+                                <option value="shopping">Shopping</option>
+                            </select>
+                        </label>
+                        <label class="bgt-filter-field">
+                            <span class="bgt-filter-label">Monthly Limit (₹)</span>
+                            <input type="number" class="filter-input" placeholder="5000" min="0" step="100" required>
+                        </label>
+                    </div>
+                    <div class="bgt-modal-actions">
+                        <button type="button" class="btn-export" data-modal-close>Cancel</button>
+                        <button type="submit" class="btn-budget">Create Budget</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Toast ============ -->
+    <div class="report-toast" data-budget-toast hidden>
+        <i data-lucide="check-circle" class="report-toast-icon"></i>
+        <span class="report-toast-text" data-budget-toast-text>Budget created successfully</span>
+    </div>
+
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass the server-computed budget data to the frontend renderer.
+    // The JS falls back to realistic demo data if this is absent.
+    window.SPENDLY_BUDGETS = {
+        budget: {{ budget | tojson }}
+    };
+</script>
+<script src="{{ url_for('static', filename='js/budgets.js') }}"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}
