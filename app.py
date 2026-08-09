@@ -36,9 +36,14 @@ update_category as db_update_category,
     get_category_stats as db_get_category_stats,
     get_categories_export as db_get_categories_export,
     merge_categories as db_merge_categories,
-    # Reports module
+# Reports module
     get_report_data as db_get_report_data,
     REPORT_DEFAULT_MONTHS,
+# Budgets module
+    get_budget_data as db_get_budget_data,
+    get_budget_months as db_get_budget_months,
+    BUDGET_STATUSES,
+    BUDGET_LIMITS,
 )
 
 # Python standard library
@@ -1576,6 +1581,93 @@ def reports():
             filters["category"],
             filters["payment"],
         ]),
+    )
+
+
+# ------------------------------------------------------------------ #
+# Budgets routes                                                       #
+# ------------------------------------------------------------------ #
+
+def _parse_budget_filters():
+    """Parse and validate the GET filter parameters for the Budgets page.
+
+    Returns a dict with:
+      - month: str (validated "YYYY-MM", else "")
+      - category: str (must be a known budget category, else "")
+      - status: str (must be in BUDGET_STATUSES, else "")
+    """
+    from database.db import BUDGET_LIMITS
+
+    month = request.args.get("month", "").strip()
+    # Validate the month format (YYYY-MM) — invalid values are ignored.
+    if month:
+        try:
+            dt_datetime.strptime(month, "%Y-%m")
+        except ValueError:
+            month = ""
+
+    category = request.args.get("category", "").strip()
+    if category and category not in BUDGET_LIMITS:
+        category = ""
+
+    status = request.args.get("status", "").strip()
+    if status not in BUDGET_STATUSES:
+        status = ""
+
+    return {"month": month, "category": category, "status": status}
+
+
+def _budget_query_args(filters):
+    """Build a dict of query params to preserve budget filter state."""
+    args = {}
+    if filters["month"]:
+        args["month"] = filters["month"]
+    if filters["category"]:
+        args["category"] = filters["category"]
+    if filters["status"]:
+        args["status"] = filters["status"]
+    return args
+
+
+@app.route("/budgets")
+def budgets():
+    """Render the Budgets dashboard with database-backed analytics.
+
+    Budget limits come from static BUDGET_LIMITS constants; actual spending
+    is computed from the user's real expense rows. Supports optional month,
+    category, and status filters via GET query parameters. Returns budget
+    progress cards, Budget vs Actual trend, Budget Distribution donut, an
+    overview table, alerts/insights, and recent activity.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    filters = _parse_budget_filters()
+
+    month = filters["month"] or None
+    category = filters["category"] or None
+    status = filters["status"] or None
+
+    budget_data = db_get_budget_data(
+        user_id,
+        month=month,
+        category=category,
+        status=status,
+    )
+
+    # The months available for the filter dropdown (distinct expense months).
+    all_months = db_get_budget_months(user_id)
+
+    return render_template(
+        "budgets.html",
+        budget=budget_data,
+        months=all_months,
+        budget_categories=list(BUDGET_LIMITS.keys()),
+        budget_statuses=list(BUDGET_STATUSES),
+        filters=filters,
+        query_args=_budget_query_args(filters),
     )
 
 

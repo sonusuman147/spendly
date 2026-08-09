@@ -79,9 +79,38 @@ CATEGORY_SORT_OPTIONS = {
     "spent-desc": "total_spent DESC, c.name COLLATE NOCASE ASC",
     "spent-asc": "total_spent ASC, c.name COLLATE NOCASE ASC",
     "count-desc": "transaction_count DESC, c.name COLLATE NOCASE ASC",
-    "created-desc": "c.created_at DESC, c.id DESC",
+"created-desc": "c.created_at DESC, c.id DESC",
     "created-asc": "c.created_at ASC, c.id ASC",
 }
+
+# ------------------------------------------------------------------ #
+# Budgets module constants                                           #
+# ------------------------------------------------------------------ #
+
+# Static monthly budget limits per category (in ₹). There is no dedicated
+# budgets table yet, so these constants define the "budget" line for the
+# Budgets module. They are configurable here and consumed by
+# get_budget_data(). If a dedicated budgets table is added later, replace
+# these derived values with user-defined budgets WITHOUT changing the
+# frontend contract (the shape of the data returned by get_budget_data()).
+BUDGET_LIMITS = {
+    "Food": 8000.0,
+    "Transport": 4000.0,
+    "Bills": 6000.0,
+    "Health": 5000.0,
+    "Entertainment": 3000.0,
+    "Shopping": 5000.0,
+    "Other": 2000.0,
+}
+
+# Default budget used for any category not present in BUDGET_LIMITS.
+DEFAULT_BUDGET_LIMIT = 2000.0
+
+# Whitelist of allowed status keys for the Budgets page filter.
+BUDGET_STATUSES = ("on-track", "warning", "over")
+
+# Number of months shown in the Budget vs Actual trend chart.
+BUDGET_TREND_MONTHS = 6
 
 
 def get_db():
@@ -150,6 +179,19 @@ def init_db():
             color TEXT NOT NULL DEFAULT '#1a472a',
             created_at TEXT DEFAULT (datetime('now')),
             UNIQUE (user_id, name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS budgets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            category TEXT NOT NULL,
+            limit_amount REAL NOT NULL,
+            period TEXT NOT NULL DEFAULT 'monthly',
+            is_default INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (user_id, category)
         )
     """)
 
@@ -732,11 +774,469 @@ def get_expenses_by_ids(user_id, ids):
     cursor.execute(
         f"SELECT id, user_id, amount, category, date, description, payment_method, created_at "
         f"FROM expenses WHERE user_id = ? AND id IN ({placeholders})",
-        (user_id, *ids),
+(user_id, *ids),
     )
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
+
+
+# ================================================================== #
+# Budgets module — DB layer                                          #
+# ================================================================== #
+
+MONTH_LABELS = [
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+]
+
+# Map a category name to a CSS category color token (shared design system).
+BUDGET_CATEGORY_COLORS = {
+    "Food": "var(--bar-food)",
+    "Transport": "var(--bar-transport)",
+    "Bills": "var(--bar-bills)",
+    "Health": "var(--bar-health)",
+    "Entertainment": "var(--bar-entertainment)",
+    "Shopping": "var(--bar-shopping)",
+    "Other": "var(--bar-other)",
+}
+
+# Map a category name to a Lucide icon token used by the budgets UI.
+BUDGET_CATEGORY_ICONS = {
+    "Food": "utensils",
+    "Transport": "bus",
+    "Bills": "zap",
+    "Health": "heart-pulse",
+    "Entertainment": "clapperboard",
+    "Shopping": "shopping-bag",
+    "Other": "circle-ellipsis",
+}
+
+
+def _budget_limit(category):
+    """Return the configured monthly budget for a category (or the default)."""
+    return BUDGET_LIMITS.get(category, DEFAULT_BUDGET_LIMIT)
+
+
+def _budget_status(pct):
+    """Return a (key, label) tuple for a budget usage percentage."""
+    if pct >= 100:
+        return ("over", "Over Budget")
+    if pct >= 75:
+        return ("warning", "At Risk")
+    return ("on-track", "On Track")
+
+
+def get_user_budgets(user_id):
+    """Return all per-user budget rows for a user.
+
+    Returns a list of dicts with id, category, limit_amount, period,
+    is_default, created_at, ordered by category name. Empty list if none.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, category, limit_amount, period, is_default, created_at "
+        "FROM budgets WHERE user_id = ? "
+        "ORDER BY category COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def create_budget(user_id, category, limit):
+    """Create a per-user budget row for a category and return its id.
+
+    Uses an upsert (INSERT ... ON CONFLICT DO UPDATE) so creating a budget
+    for a category that already exists simply updates the limit. Raises
+    sqlite3.IntegrityError only on unexpected constraint violations.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO budgets (user_id, category, limit_amount, period, is_default) "
+        "VALUES (?, ?, ?, 'monthly', 0) "
+        "ON CONFLICT(user_id, category) DO UPDATE SET "
+        "limit_amount = excluded.limit_amount, is_default = 0",
+        (user_id, category, float(limit)),
+    )
+    budget_id = cursor.lastrowid
+    if budget_id is None:
+        # Upsert may not return lastrowid on some builds; fetch it.
+        cursor.execute(
+            "SELECT id FROM budgets WHERE user_id = ? AND category = ?",
+            (user_id, category),
+        )
+        row = cursor.fetchone()
+        budget_id = row["id"] if row else None
+    conn.commit()
+    conn.close()
+    return budget_id
+
+
+def update_budget_limit(user_id, category, limit):
+    """Update a budget's limit for a user/category.
+
+    Creates the row if it does not yet exist (upsert). Returns True if a
+    row was affected. Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO budgets (user_id, category, limit_amount, period, is_default) "
+        "VALUES (?, ?, ?, 'monthly', 0) "
+        "ON CONFLICT(user_id, category) DO UPDATE SET "
+        "limit_amount = excluded.limit_amount, is_default = 0",
+        (user_id, category, float(limit)),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def delete_budget(user_id, category):
+    """Delete a per-user budget row for a category.
+
+    Returns True if a row was deleted, False if no matching row found.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM budgets WHERE user_id = ? AND category = ?",
+        (user_id, category),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def reset_budget_defaults(user_id):
+    """Remove all per-user budget rows so defaults are used again.
+
+    Returns the number of rows removed. Uses parameterized queries — safe
+    from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM budgets WHERE user_id = ?",
+        (user_id,),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected
+
+
+def _effective_budget_limits(user_id):
+    """Return a dict of category -> limit merging user rows over defaults.
+
+    For every category in BUDGET_LIMITS, use the user's per-category limit
+    if one exists, otherwise fall back to the static default. Any per-user
+    rows for categories not in BUDGET_LIMITS are appended with their limit.
+    """
+    limits = dict(BUDGET_LIMITS)
+    user_rows = get_user_budgets(user_id)
+    for row in user_rows:
+        limits[row["category"]] = float(row["limit_amount"])
+    return limits
+
+
+def get_budget_months(user_id):
+    """Return the distinct months (YYYY-MM) that have expenses for a user.
+
+    Used to populate the month filter dropdown on the Budgets page. Ordered
+    newest first. Returns a list of {value, label} dicts.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT DISTINCT strftime('%Y-%m', date) AS month "
+        "FROM expenses WHERE user_id = ? "
+        "ORDER BY month DESC",
+        (user_id,),
+    )
+    months = []
+    for row in cursor.fetchall():
+        value = row["month"]
+        parts = value.split("-")
+        label = f"{MONTH_LABELS[int(parts[1])]} {parts[0]}"
+        months.append({"value": value, "label": label})
+    conn.close()
+    return months
+
+
+def get_budget_data(user_id, month=None, category=None, status=None):
+    """Compute the full Budgets module data for a user.
+
+    Budget limits come from the static BUDGET_LIMITS constants (there is no
+    dedicated budgets table). Actuals are derived from the user's real expense
+    rows, grouped by category and month.
+
+    Args:
+        user_id: the owning user.
+        month: optional "YYYY-MM" filter (defaults to the current month).
+        category: optional category name filter.
+        status: optional status key filter ("on-track" | "warning" | "over").
+
+    Returns a dict with:
+      - budgets: list of {name, icon, color, limit, spent, remaining, period,
+                 pct, status_key, status_label}
+      - summary: {total_budget, total_spent, remaining, pct, over_count,
+                 daily, days_left}
+      - monthly_trend: list of {label, budget, actual} for the last
+        BUDGET_TREND_MONTHS months
+      - distribution: list of {name, color, limit} for the donut
+      - insights: list of {icon, accent, title, text}
+      - activity: list of {id, action, category, description, amount,
+                 created_at, time_label}
+      - months: list of {value, label} distinct expense months
+      - filter_info: {month, category, status}
+    """
+    # Default the month filter to the current calendar month.
+    if not month:
+        today = date.today()
+        month = f"{today.year:04d}-{today.month:02d}"
+
+    # --- Category spending for the selected month (grouped by category) ---
+    conn = get_db()
+    cursor = conn.cursor()
+
+    where = "WHERE user_id = ? AND strftime('%Y-%m', date) = ?"
+    params = [user_id, month]
+    if category:
+        where += " AND category = ?"
+        params.append(category)
+
+    cursor.execute(
+        "SELECT category, COALESCE(SUM(amount), 0.0) AS spent "
+        f"FROM expenses {where} "
+        "GROUP BY category ORDER BY spent DESC",
+        tuple(params),
+    )
+    spent_by_cat = {row["category"]: row["spent"] for row in cursor.fetchall()}
+
+    # --- Monthly actuals for the trend chart (last N months) ---
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, COALESCE(SUM(amount), 0.0) AS actual "
+        "FROM expenses WHERE user_id = ? "
+        "GROUP BY month ORDER BY month ASC",
+        (user_id,),
+    )
+    actual_by_month = {row["month"]: row["actual"] for row in cursor.fetchall()}
+
+    # --- Recent activity (for the timeline) ---
+    cursor.execute(
+        "SELECT id, action, category, description, amount, created_at "
+        "FROM activities WHERE user_id = ? "
+        "ORDER BY created_at DESC, id DESC LIMIT 8",
+        (user_id,),
+    )
+    activity_rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+# --- Build the per-category budget list ---
+    # Show every configured budget category, merging any per-user limits
+    # over the static defaults. If a category filter is set, only that
+    # category is included.
+    effective_limits = _effective_budget_limits(user_id)
+    budgets = []
+    for cat, limit in effective_limits.items():
+        if category and cat != category:
+            continue
+        spent = spent_by_cat.get(cat, 0.0)
+        remaining = limit - spent
+        pct = (spent / limit * 100) if limit > 0 else 0.0
+        s_key, s_label = _budget_status(pct)
+
+        b = {
+            "name": cat,
+            "icon": BUDGET_CATEGORY_ICONS.get(cat, "circle"),
+            "color": BUDGET_CATEGORY_COLORS.get(cat, "var(--accent)"),
+            "limit": round(limit, 2),
+            "spent": round(spent, 2),
+            "remaining": round(remaining, 2),
+            "period": "This month",
+            "pct": round(pct, 1),
+            "status_key": s_key,
+            "status_label": s_label,
+        }
+        budgets.append(b)
+
+    # Apply the status filter if requested.
+    if status:
+        budgets = [b for b in budgets if b["status_key"] == status]
+
+    # --- Summary cards ---
+    total_budget = sum(b["limit"] for b in budgets)
+    total_spent = sum(b["spent"] for b in budgets)
+    remaining = total_budget - total_spent
+    pct = (total_spent / total_budget * 100) if total_budget > 0 else 0.0
+    over_count = sum(1 for b in budgets if b["status_key"] == "over")
+
+    if month == f"{date.today().year:04d}-{date.today().month:02d}":
+        days_left = date.today().day
+        days_left = max(1, date.today().day)
+    else:
+        days_left = 1
+    daily = max(0, remaining / days_left) if days_left > 0 else 0
+
+    summary = {
+        "total_budget": round(total_budget, 2),
+        "total_spent": round(total_spent, 2),
+        "remaining": round(max(0, remaining), 2),
+        "pct": round(pct, 1),
+        "over_count": over_count,
+        "daily": round(daily, 2),
+        "days_left": days_left,
+    }
+
+    # --- Trend chart (last N months) ---
+    trend = []
+    today = date.today()
+    total_limit = sum(BUDGET_LIMITS.values())
+    for i in range(BUDGET_TREND_MONTHS - 1, -1, -1):
+        m = today.month - i
+        y = today.year
+        while m < 1:
+            m += 12
+            y -= 1
+        key = f"{y:04d}-{m:02d}"
+        trend.append({
+            "label": MONTH_LABELS[m][:3],
+            "budget": round(total_limit, 2),
+            "actual": round(actual_by_month.get(key, 0.0), 2),
+        })
+
+    # --- Distribution (donut) ---
+    distribution = [
+        {"name": b["name"], "color": b["color"], "limit": b["limit"]}
+        for b in budgets
+    ]
+
+    # --- Insights (data-driven) ---
+    insights = _compute_budget_insights(budgets, summary, trend)
+
+    # --- Activity timeline ---
+    activity = []
+    for r in activity_rows:
+        activity.append({
+            "id": r["id"],
+            "action": r["action"],
+            "category": r["category"],
+            "description": r["description"],
+            "amount": r["amount"],
+            "created_at": r["created_at"],
+            "time_label": _format_activity_time(r["created_at"]),
+        })
+
+    return {
+        "budgets": budgets,
+        "summary": summary,
+        "monthly_trend": trend,
+        "distribution": distribution,
+        "insights": insights,
+        "activity": activity,
+        "months": get_budget_months(user_id),
+        "filter_info": {
+            "month": month,
+            "category": category or "",
+            "status": status or "",
+        },
+    }
+
+
+def _compute_budget_insights(budgets, summary, trend):
+    """Generate data-driven alert/insight cards for the Budgets page.
+
+    Returns a list of dicts with keys: icon, accent, tone, title, text.
+    """
+    insights = []
+
+    # 1. Over-budget alerts.
+    over = [b for b in budgets if b["status_key"] == "over"]
+    if over:
+        names = ", ".join(b["name"] for b in over[:2])
+        insights.append({
+            "icon": "alert-triangle",
+            "accent": "var(--danger)",
+            "tone": "over",
+            "title": f"{len(over)} budget{'s' if len(over) > 1 else ''} over limit",
+            "text": f"{names} {('have' if len(over) > 1 else 'has')} exceeded their monthly limits. Review upcoming expenses to get back on track.",
+        })
+    else:
+        insights.append({
+            "icon": "shield-check",
+            "accent": "var(--accent)",
+            "tone": "track",
+            "title": "No budgets over limit",
+            "text": "All categories are within their monthly budgets. Great discipline!",
+        })
+
+    # 2. At-risk / warning budgets.
+    warn = [b for b in budgets if b["status_key"] == "warning"]
+    if warn:
+        insights.append({
+            "icon": "trending-up",
+            "accent": "var(--accent-2)",
+            "tone": "warning",
+            "title": "Budgets approaching limits",
+            "text": ", ".join(b["name"] for b in warn[:3]) + " are at risk of exceeding their budgets. Consider trimming spending.",
+        })
+    else:
+        insights.append({
+            "icon": "gauge",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": "All budgets on track",
+            "text": "No category is approaching its limit this month.",
+        })
+
+    # 3. Daily spend pace insight.
+    if summary["total_budget"] > 0:
+        insights.append({
+            "icon": "calendar-clock",
+            "accent": "var(--bar-bills)",
+            "tone": "track",
+            "title": f"Daily pace of ₹{summary['daily']:,.0f}",
+            "text": f"You can spend about ₹{summary['daily']:,.0f} per day for the rest of the month to stay within budget.",
+        })
+
+    # 4. Savings headroom insight.
+    if summary["remaining"] > 0:
+        insights.append({
+            "icon": "piggy-bank",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": f"₹{summary['remaining']:,.0f} of headroom left",
+            "text": f"You have ₹{summary['remaining']:,.0f} unspent across all budgets this month. Saving it could add up quickly.",
+        })
+
+    return insights
+
+
+def _format_activity_time(created_at):
+    """Format an activity timestamp as a short relative label."""
+    if not created_at:
+        return "Recently"
+    try:
+        from datetime import datetime as dt_parse
+        dt = dt_parse.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return "Recently"
+    now = date.today()
+    if dt.date() == now:
+        return f"Today · {dt.strftime('%I:%M %p')}"
+    if dt.date() == now - timedelta(days=1):
+        return f"Yesterday · {dt.strftime('%I:%M %p')}"
+    return dt.strftime('%b %d · %I:%M %p')
 
 
 # ================================================================== #
