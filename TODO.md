@@ -11,3 +11,4 @@
 - [ ] **budgets.js**: Consume real backend data, wire all forms/actions via fetch, remove demo/placeholder behavior
 - [ ] Run `pytest` to confirm no regressions
 - [ ] Report modified files, UI improvements, before/after differences
+
