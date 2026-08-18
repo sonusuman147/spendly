@@ -6,8 +6,8 @@
 > It is intended for new developers who need to understand, run, maintain, and
 > extend the application without any external guidance. Every statement below
 > is based on the actual source code in this repository (last verified against
-> the current state of the codebase — Dashboard, Expenses, Transactions, and
-> Categories modules).
+> the current state of the codebase — Dashboard, Expenses, Transactions,
+> Categories, Reports, and Budgets modules).
 
 ---
 
@@ -43,9 +43,10 @@
 **SQLite**. Users can sign up with an email/password or "Continue with Google",
 log expenses with amount/category/description/date/payment-method, manage
 custom categories with icons and colors, browse a filterable, sortable,
-paginated Transactions ledger, and view rich spending insights (summary cards,
+paginated Transactions ledger, view rich spending insights (summary cards,
 donut chart, top-category rankings, category analytics) across their Dashboard,
-Expenses, Transactions, and Categories pages.
+Expenses, Transactions, and Categories pages, and explore database-backed
+analytics on the Reports and Budgets pages.
 
 The project delivers:
 - Full **Dashboard** (Profile) with date-filtered expense summary, recent
@@ -57,6 +58,16 @@ The project delivers:
   (icon, color, name, description, usage stats), donut chart, top-categories
   ranking, quick actions, add/edit forms with icon/color pickers, protected
   in-use deletion, merge, CSV export, and a dedicated analytics page.
+- **Reports module** with database-backed analytics: summary cards, monthly
+  spending trend line chart, current-vs-previous period bar chart, category
+  and payment-method donut charts, top expenses table, monthly summary table,
+  data-driven insight cards, and client-side PDF/Excel export.
+- **Budgets module** with database-backed budget progress: per-category
+  budget limits (static constants merged with per-user overrides), budget
+  progress cards, Budget vs Actual bar chart, Budget Distribution donut,
+  overview table, alerts/insights, and a recent activity timeline. The
+  `budgets` table exists in the schema and DB helpers for CRUD are present,
+  but no CRUD routes are implemented yet.
 
 The project deliberately avoids heavy abstractions:
 
@@ -80,7 +91,7 @@ an authenticated app shell, real database persistence, and 104 passing tests.
 | **Email/password sign-in** | Session-based login with generic error messages (no account enumeration). |
 | **Google OAuth sign-in** | "Continue with Google" via Authlib. Auto-creates a new account or auto-links to an existing account by matching email. |
 | **Password recovery** | Two-step flow: enter email → answer security question → set a new password. No email server required. |
-| **App-shell UI** | Left sidebar (Dashboard, Expenses, Transactions, Categories, plus Reports/Budgets/Goals/Settings placeholders), top header with search/theme/profile menu, responsive mobile drawer, collapsible sidebar. |
+| **App-shell UI** | Left sidebar (Dashboard, Expenses, Transactions, Categories, Reports, Budgets, plus Goals/Settings/Help placeholders), top header with search/theme/profile menu, responsive mobile drawer, collapsible sidebar. |
 | **Theme switching** | Light / Dark / System theme persisted in `localStorage` (`spendly-theme`). |
 | **Dashboard (Profile)** | Total spent (₹), transaction count, top category, recent 5 transactions, and a category breakdown with proportional bars. |
 | **Date filtering** | Quick filters — All Time, This Month, Last 3 Months, Last 6 Months — plus a custom Start/End date range. |
@@ -94,6 +105,8 @@ an authenticated app shell, real database persistence, and 104 passing tests.
 | **Merge categories** | Reassign all expenses/activity from a source category into a target category, then remove the source. |
 | **Category analytics** | Dedicated analytics page with spending distribution donut, ranking, and full breakdown table. |
 | **CSV exports** | Export the filtered/selected Transactions ledger, or export all Categories with usage stats. |
+| **Reports module** | Database-backed analytics with date/category/payment filters, 6 summary cards, monthly trend line chart, current-vs-prev bar chart, category & payment donuts, top expenses & monthly summary tables, data-driven insights, and client-side PDF/Excel export. |
+| **Budgets module** | Database-backed budget progress with month/category/status filters, 4 summary cards, per-category progress cards, Budget vs Actual bar chart, Budget Distribution donut, overview table, alerts/insights, and recent activity timeline. |
 | **Legal pages** | Terms & Conditions and Privacy Policy pages. |
 | **Seed data** | A demo user (`demo@spendly.com` / `demo123`), 8 sample expenses with payment methods, matching activity records, and 7 default categories are inserted automatically on first run. |
 
@@ -137,12 +150,13 @@ Spendly follows a simple **route → helper → SQLite** layering:
            ▼
 ┌──────────────────────┐
 │  database/db.py      │  All SQL: schema, seed, CRUD, summary queries,
-│  (raw sqlite3)       │  transactions ledger, category stats/merge/export
+│  (raw sqlite3)       │  transactions ledger, category stats/merge/export,
+│                      │  report data, budget data
 └──────────┬───────────┘
            │  DATABASE_PATH = "expense_tracker.db"
            ▼
 ┌──────────────────────┐
-│  SQLite database     │  Tables: users, expenses, activities, categories
+│  SQLite database     │  Tables: users, expenses, activities, categories, budgets
 └──────────────────────┘
 ```
 
@@ -175,6 +189,8 @@ sequenceDiagram
 | Expenses CRUD | `list_expenses`, `add_expense`, `edit_expense`, `delete_expense_view` | expense + category helpers, `add_activity` |
 | Transactions | `transactions`, `transactions_export`, `transactions_bulk_delete` | `get_transactions`, `get_expenses_by_ids`, `delete_expenses_bulk`, `get_recent_activity`, `add_activity` |
 | Categories | `categories`, `add_category`, `view_category`, `edit_category`, `delete_category_view`, `merge_categories_view`, `categories_export`, `categories_analytics` | category CRUD/stats/merge/export helpers |
+| Reports | `reports` | `get_report_data`, `get_user_categories` |
+| Budgets | `budgets` | `get_budget_data`, `get_budget_months`, `get_user_categories` |
 
 ---
 
@@ -188,7 +204,7 @@ spendly/
 ├── PROJECT_DOCUMENTATION.md     # This document
 ├── CLAUDE.md                    # Agent/maintenance notes & conventions
 ├── implementation_plan.md       # Historical implementation plan for Step 06
-├── TODO.md                      # Task tracking (frontend redesign pass)
+├── TODO.md                      # Task tracking (Budgets module redesign pass)
 ├── .gitignore                   # Ignores venv/, *.db, __pycache__, .env, etc.
 ├── expense_tracker.db           # SQLite database (created at runtime, gitignored)
 ├── database/
@@ -206,6 +222,8 @@ spendly/
 │   ├── privacy.html             # Privacy policy
 │   ├── terms.html               # Terms & conditions
 │   ├── transactions.html        # Transactions ledger (summary cards, filter bar, table, activity panel, modal)
+│   ├── reports.html             # Reports dashboard (filter bar, summary cards, charts, tables, insights)
+│   ├── budgets.html             # Budgets dashboard (filter bar, summary cards, progress, charts, table, insights)
 │   ├── expenses/
 │   │   ├── list.html            # Expense list table
 │   │   ├── form.html            # Add / Edit expense form (with payment method)
@@ -224,11 +242,15 @@ spendly/
 │   │   ├── profile.css          # Profile dashboard, filter bar, stats, category bars, edit page
 │   │   ├── expenses.css         # Expense table, form, delete confirmation, tags
 │   │   ├── transactions.css     # Transactions ledger, filters, table, activity panel, modal
-│   │   └── categories.css       # Categories dashboard, forms, donut, ranking, merge, analytics
+│   │   ├── categories.css       # Categories dashboard, forms, donut, ranking, merge, analytics
+│   │   ├── reports.css          # Reports dashboard, filter bar, charts, tables, insights
+│   │   └── budgets.css          # Budgets dashboard, filter bar, progress cards, charts, table, insights
 │   └── js/
 │       ├── main.js              # App shell JS — sidebar, drawer, dropdown, theme switch
 │       ├── transactions.js      # Transactions UX — view modal, bulk selection, export link
-│       └── categories.js        # Categories UX — icon/color pickers, filter auto-submit, delete confirm
+│       ├── categories.js        # Categories UX — icon/color pickers, filter auto-submit, delete confirm
+│       ├── reports.js           # Reports UX — chart/table rendering, export PDF/Excel, filter interactions
+│       └── budgets.js           # Budgets UX — progress cards, charts, table, insights, timeline, demo modal
 └── tests/
     ├── __init__.py              # Test package marker
     ├── conftest.py              # Pytest fixtures (app, client, db) + temp-DB isolation
@@ -258,9 +280,11 @@ The entire Flask application.
   - Expenses: `list_expenses`, `add_expense`, `edit_expense`, `delete_expense_view`.
   - Transactions: `transactions`, `transactions_export`, `transactions_bulk_delete` + helper `_parse_transaction_filters`, `_transactions_query_args`.
   - Categories: `categories`, `add_category`, `view_category`, `edit_category`, `delete_category_view`, `merge_categories_view`, `categories_export`, `categories_analytics` + helper `_parse_category_filters`, `_category_query_args`.
+  - Reports: `reports` + helper `_parse_report_filters`, `_report_query_args`.
+  - Budgets: `budgets` + helper `_parse_budget_filters`, `_budget_query_args`.
 - **`login_required()` helper**: A plain function (not a decorator) that returns a redirect response if `session.get("user_id")` is absent, otherwise `None`. Each protected route calls it first.
 - **Session keys used**: `user_id`, `user_name`, `reset_user_id`, `security_question`.
-- **User-category aware forms**: The expense add/edit forms and the Transactions filter dropdown load the logged-in user's categories via `get_user_categories()` so custom categories appear alongside the defaults.
+- **User-category aware forms**: The expense add/edit forms, the Transactions filter dropdown, the Reports filter dropdown, and the Budgets page all load the logged-in user's categories via `get_user_categories()` so custom categories appear alongside the defaults.
 - **Run block**: `PORT` env var (default `5001`), `app.run(host="0.0.0.0", port=port)`.
 
 ### 6.2 `database/__init__.py`
@@ -281,13 +305,23 @@ All database logic. Key constants:
 | `CATEGORY_ICONS` | 22 Lucide icon names offered by the category icon picker. |
 | `CATEGORY_COLORS` | 15 preset hex colors for category color picker. |
 | `CATEGORY_SORT_OPTIONS` | Whitelist for category sorting (name/spent/count/created × asc/desc). |
+| `BUDGET_LIMITS` | Static monthly budget limits per category (in ₹) — `Food: 8000`, `Transport: 4000`, `Bills: 6000`, `Health: 5000`, `Entertainment: 3000`, `Shopping: 5000`, `Other: 2000`. |
+| `DEFAULT_BUDGET_LIMIT` | `2000.0` — default budget for any category not in `BUDGET_LIMITS`. |
+| `BUDGET_STATUSES` | `("on-track", "warning", "over")` — whitelist for the Budgets page filter. |
+| `BUDGET_TREND_MONTHS` | `6` — number of months shown in the Budget vs Actual trend chart. |
+| `REPORT_DEFAULT_MONTHS` | `6` — default number of months for the Reports period. |
+| `REPORT_PAYMENT_LABELS` | Maps payment method keys to display labels for Reports. |
+| `REPORT_PAYMENT_COLORS` | Maps payment method keys to CSS color variables for Reports. |
+| `MONTH_LABELS` | Full month names for budget/report month formatting. |
+| `BUDGET_CATEGORY_COLORS` | Maps category names to CSS color variables for the Budgets UI. |
+| `BUDGET_CATEGORY_ICONS` | Maps category names to Lucide icon names for the Budgets UI. |
 
 Key functions:
 
 | Function | Purpose |
 |---|---|
 | `get_db()` | Opens `sqlite3` connection with `timeout=10`, `row_factory = sqlite3.Row`, `PRAGMA foreign_keys = ON`. |
-| `init_db()` | `CREATE TABLE IF NOT EXISTS` for **`users`, `expenses`, `activities`, `categories`**; adds `google_id`, `security_question`, `security_answer_hash`, and `payment_method` columns via `ALTER TABLE` guarded by `try/except`. |
+| `init_db()` | `CREATE TABLE IF NOT EXISTS` for **`users`, `expenses`, `activities`, `categories`, `budgets`**; adds `google_id`, `security_question`, `security_answer_hash`, and `payment_method` columns via `ALTER TABLE` guarded by `try/except`. |
 | `seed_db()` | Inserts demo user + 8 sample expenses (with payment methods) + matching activity records + 7 default category rows **only if** the `users` table is empty. |
 | `create_user(...)` | Inserts a user; returns new `id`; raises `IntegrityError` on duplicate email. Google-only users get `password_hash=""`. |
 | `get_user_by_email` / `get_user_by_google_id` | Full user row by email / Google `sub` ID. |
@@ -312,6 +346,19 @@ Key functions:
 | `get_category_stats(user_id)` | `{total_categories, most_used_category, highest_spending_category, unused_categories, total_spent, distribution, conic_gradient, ranking}`. |
 | `get_categories_export(user_id)` | Flat rows (name, description, icon, color, created_at, stats) for CSV export. |
 | `merge_categories(user_id, source_id, target_id)` | Reassigns source expenses/activity to target, deletes source. Returns `False` on self/invalid merge. |
+| `get_user_budgets(user_id)` | All per-user budget rows for a user, ordered by category name. |
+| `create_budget(user_id, category, limit)` | Upsert (INSERT ... ON CONFLICT DO UPDATE) a per-user budget row; returns the budget id. |
+| `update_budget_limit(user_id, category, limit)` | Upsert a budget limit; returns `True` if a row was affected. |
+| `delete_budget(user_id, category)` | Delete a per-user budget row; returns `True` if a row was deleted. |
+| `reset_budget_defaults(user_id)` | Remove all per-user budget rows so defaults are used again; returns the number of rows removed. |
+| `_effective_budget_limits(user_id)` | Merges per-user budget rows over static `BUDGET_LIMITS` defaults. |
+| `get_budget_months(user_id)` | Distinct expense months (`YYYY-MM`) for the Budgets month filter dropdown. |
+| `get_budget_data(user_id, month, category, status)` | Computes the full Budgets module data: per-category budgets with limits/spent/remaining/pct/status, summary cards, monthly trend, distribution, insights, activity timeline, and filter info. |
+| `_compute_budget_insights(...)` | Generates data-driven alert/insight cards for the Budgets page. |
+| `_format_activity_time(created_at)` | Formats an activity timestamp as a short relative label (Today/Yesterday/date). |
+| `_build_report_filters` / `get_report_data(...)` | Computes full report data: summary cards, monthly trend, previous-period comparison, category & payment breakdowns, top expenses, monthly summary, insights, and filter info. |
+| `_compute_period_range` / `_compute_prev_period` | Date-range helpers for the Reports period and previous-period comparison. |
+| `_compute_insights(...)` | Generates data-driven insight cards for the Reports page. |
 | `add_activity` / `get_recent_activity` | Record/read activity feed (validated against `ACTIVITY_ACTIONS`). |
 
 All SQL uses `?` parameter placeholders — no string-formatted SQL.
@@ -320,16 +367,16 @@ All SQL uses `?` parameter placeholders — no string-formatted SQL.
 Pinned dependency manifest (see [§15 Dependencies](#15-dependencies)).
 
 ### 6.5 `README.MD`
-Human-readable readme describing features, tech stack, structure, setup, routes, security notes, and constraints. The project's primary user-facing doc.
+Human-readable readme describing features, tech stack, structure, setup, routes, security notes, and constraints. The project's primary user-facing doc. **Note:** The README does not yet document the Reports or Budgets modules.
 
 ### 6.6 `CLAUDE.md`
-Maintenance guide containing architecture overview, code-style rules, tech constraints, route tables, security features, testing patterns, warnings, commands, and a subagent policy. Useful for AI-assisted development.
+Maintenance guide containing architecture overview, code-style rules, tech constraints, route tables, security features, testing patterns, warnings, commands, and a subagent policy. Useful for AI-assisted development. **Note:** The CLAUDE.md does not yet document the Reports or Budgets modules.
 
 ### 6.7 `implementation_plan.md`
 Historical plan for "Step 06 — Backend Routes for Profile Page": documents the `member_since` formatting change, category percentage rounding, and creation of the test suite.
 
 ### 6.8 `TODO.md`
-Small task tracker. Documents the completed frontend redesign fix pass (sidebar shell, branding restore, theme system, expense/transactions/categories styling).
+Task tracker for the Budgets module redesign pass. Documents the completed research and DB-helper confirmation, and lists pending work: adding `/budgets/create`, `/budgets/delete`, `/budgets/reset` POST routes, redesigning `budgets.html` with real server-driven filters and functional modal, premium styling, and wiring `budgets.js` to real backend data (removing demo/placeholder behavior).
 
 ### 6.9 `.gitignore`
 Ignores `venv/`, `expense_tracker.db`, `__pycache__/`, `*.pyc`, `*.pyo`, `.env`, `.DS_Store`, `.claude/plans/`.
@@ -338,7 +385,7 @@ Ignores `venv/`, `expense_tracker.db`, `__pycache__/`, `*.pyc`, `*.pyo`, `.env`,
 
 | File | Purpose |
 |---|---|
-| `base.html` | Root app-shell layout: `<head>` with fonts + global CSS; pre-render theme script; left sidebar (brand, user card, nav with Dashboard/Expenses/Transactions/Categories active states, "Soon" placeholders for Reports/Budgets/Goals/Settings/Help), top header (hamburger, page title + breadcrumb, search, notifications, theme switch, profile dropdown), `<main>` → `{% block content %}`, lucide + `main.js` + theme persistence, `{% block scripts %}`. |
+| `base.html` | Root app-shell layout: `<head>` with fonts + global CSS; pre-render theme script; left sidebar (brand, user card, nav with Dashboard/Expenses/Transactions/Categories/Reports/Budgets active states, "Soon" placeholders for Goals/Settings/Help), top header (hamburger, page title + breadcrumb, search, notifications, theme switch, profile dropdown), `<main>` → `{% block content %}`, lucide + `main.js` + theme persistence, `{% block scripts %}`. |
 | `landing.html` | Public landing. Hero badge/title/subtitle, CTA buttons, mock dashboard visual, video modal (YouTube placeholder), feature cards, CTA section. |
 | `login.html` | Sign-in card. Google button (links to `google_login`), divider, email/password form, "Forgot password?" link, register switch, flashed messages. |
 | `register.html` | Registration form: name, email, password, confirm password, security question select, security answer. |
@@ -347,6 +394,8 @@ Ignores `venv/`, `expense_tracker.db`, `__pycache__/`, `*.pyc`, `*.pyo`, `.env`,
 | `profile.html` | Authenticated dashboard: user header, Edit Profile button, date filter bar, three stat cards, Recent Transactions table, By Category breakdown with bars. |
 | `profile_edit.html` | Edit profile: avatar column, name/email inputs, change-password card, show/hide toggles, cancel/save footer. |
 | `transactions.html` | Transactions ledger: page header (Add Transaction / Export), five summary cards, filter bar (search, category, date range, amount range, sort), bulk bar, table (date, description, category, payment, amount, actions), pagination, empty states, Recent Activity panel, view modal. |
+| `reports.html` | Reports dashboard: page header (Generate Report / Export PDF / Export Excel), filter bar (date range, category, payment method), six summary cards, empty state, Spending Trends line chart, Monthly Comparison bar chart, By Category donut, By Payment Method donut, Top Expenses table, Monthly Summary table, Insights cards, Quick Actions, export toast. |
+| `budgets.html` | Budgets dashboard: page header (Create Budget / Export PDF / Export Excel), filter bar (month, category, status), four summary cards, Budget Progress cards, Budget vs Actual bar chart, Budget Distribution donut, Budget Overview table, Alerts & Insights, Recent Budget Activity timeline, Quick Actions, demo Create Budget modal, toast. |
 | `expenses/list.html` | Expense table (Date, Description, Category tag, Payment badge, Amount, Actions) or empty state with CTA. |
 | `expenses/form.html` | Add/Edit expense form: amount, category (user categories), description, payment method, date (defaults today). |
 | `expenses/delete.html` | Delete confirmation card with expense details and a destructive POST form. |
@@ -367,9 +416,13 @@ Ignores `venv/`, `expense_tracker.db`, `__pycache__/`, `*.pyc`, `*.pyo`, `.env`,
 | `css/expenses.css` | Expense list table, add/edit form, delete confirmation, category tag colors, empty state, action buttons. |
 | `css/transactions.css` | Transactions ledger: header, 5 stat cards, two-column layout, filter bar, bulk bar, table, payment badges, pagination, empty states, activity panel, view modal, responsive. |
 | `css/categories.css` | Categories module: dashboard header, 4 stat cards, two-column layout, filter bar, table (swatches, count badges), quick actions, donut (conic-gradient), legend, ranking, forms (icon/color grids), view page, delete confirmation, merge layout, analytics, responsive. |
-| `js/main.js` | App shell behavior: sidebar collapse/toggle, mobile drawer, profile dropdown, theme persistence. |
-| `js/transactions.js` | Transactions behavior: view modal population, bulk selection + select-all, export link builder, activity feed timestamps. |
+| `css/reports.css` | Reports module: header, filter bar, 6 stat cards, charts layout (line chart, bar chart, donuts), tables layout, insights, quick actions, toast, responsive. |
+| `css/budgets.css` | Budgets module: header, filter bar, 4 stat cards, progress cards, charts layout (bar chart, donut), overview table, alerts/insights, activity timeline, quick actions, modal, toast, responsive. |
+| `js/main.js` | App shell behavior: sidebar collapse/toggle, mobile drawer, profile dropdown, theme persistence, notification toggle, keyboard shortcut for search. |
+| `js/transactions.js` | Transactions behavior: view modal population, bulk selection + select-all, export link builder, activity feed timestamps, filter auto-submit. |
 | `js/categories.js` | Categories behavior: icon picker, color picker, debounced search auto-submit, sort/per-page auto-submit, reset filter, delete-confirmation checkbox state. |
+| `js/reports.js` | Reports behavior: renders server-computed report data into line chart (SVG), bar chart, donut charts, and tables; loading skeletons; filter interactions; Generate Report / Export PDF / Export Excel buttons; export toast. |
+| `js/budgets.js` | Budgets behavior: renders server-computed budget data (with demo fallback) into progress cards, bar chart, donut chart, overview table, alerts/insights, and activity timeline; frontend-only filters; demo Create Budget modal; Export PDF / Export Excel; toast. |
 
 ### 6.12 Tests — `tests/`
 
@@ -380,6 +433,8 @@ Ignores `venv/`, `expense_tracker.db`, `__pycache__/`, `*.pyc`, `*.pyo`, `.env`,
 | `test_backend_connection.py` | 17 tests across 3 classes: `TestGetUserById`, `TestGetUserExpensesSummary`, `TestProfileRoute`. |
 | `test_transactions.py` | 42 tests across 8 classes: payment persistence, `get_transactions` filters/sort/pagination/summary, bulk ops, activity log, Transactions routes (render, export, bulk delete), and expense CRUD payment routes. |
 | `test_categories.py` | 45 tests across 8 classes: default/backfill categories, category CRUD, `get_categories`, `get_category_stats`, export/merge, and the Categories routes (render, CRUD, merge, export, analytics). |
+
+> **Note:** There are currently **no automated tests** for the Reports or Budgets modules.
 
 ---
 
@@ -432,9 +487,20 @@ erDiagram
         TEXT created_at "DEFAULT datetime('now')"
     }
 
+    budgets {
+        INTEGER id PK "AUTOINCREMENT"
+        INTEGER user_id FK "NOT NULL REFERENCES users(id)"
+        TEXT category "NOT NULL"
+        REAL limit_amount "NOT NULL"
+        TEXT period "DEFAULT 'monthly'"
+        INTEGER is_default "DEFAULT 0"
+        TEXT created_at "DEFAULT datetime('now')"
+    }
+
     users ||--o{ expenses : "owns"
     users ||--o{ activities : "logs"
     users ||--o{ categories : "defines"
+    users ||--o{ budgets : "configures"
 ```
 
 ### 7.1 `users` table
@@ -488,7 +554,25 @@ erDiagram
 | `color` | TEXT | DEFAULT `'#1a472a'` | Hex color for swatches / charts |
 | `created_at` | TEXT | DEFAULT `datetime('now')` | Creation timestamp |
 
-### 7.5 Seed data (`seed_db()`)
+### 7.5 `budgets` table
+
+| Column | Type | Constraints | Notes |
+|---|---|---|---|
+| `id` | INTEGER | PRIMARY KEY AUTOINCREMENT | |
+| `user_id` | INTEGER | NOT NULL REFERENCES `users(id)` | FK enforced per connection |
+| `category` | TEXT | NOT NULL, `UNIQUE(user_id, category)` | Category name |
+| `limit_amount` | REAL | NOT NULL | Monthly budget limit in ₹ |
+| `period` | TEXT | DEFAULT `'monthly'` | Budget period |
+| `is_default` | INTEGER | DEFAULT `0` | Whether this is a default budget row |
+| `created_at` | TEXT | DEFAULT `datetime('now')` | Creation timestamp |
+
+> **Note:** The `budgets` table is created by `init_db()` and DB helpers exist
+> (`get_user_budgets`, `create_budget`, `update_budget_limit`, `delete_budget`,
+> `reset_budget_defaults`), but **no CRUD routes** are implemented yet. The
+> Budgets page currently uses the static `BUDGET_LIMITS` constants merged with
+> any per-user rows via `_effective_budget_limits()`.
+
+### 7.6 Seed data (`seed_db()`)
 
 Demo user:
 - **Name:** Demo User · **Email:** `demo@spendly.com` · **Password:** `demo123`
@@ -513,7 +597,7 @@ Matching `activities` rows (`action = 'added'`) are inserted for the Recent Acti
 
 ## 8. Routes
 
-All routes are defined in `app.py`. Total: **29 routes** (plus helper functions).
+All routes are defined in `app.py`. Total: **31 routes** (plus helper functions).
 
 ### 8.1 Public & Auth
 
@@ -572,7 +656,24 @@ All routes are defined in `app.py`. Total: **29 routes** (plus helper functions)
 | `/categories/export` | GET | `categories_export` | Requires auth. CSV export of all categories with usage stats (`Name`, `Description`, `Icon`, `Color`, `Created`, `Transactions`, `Total Spent`, `Average`). |
 | `/categories/analytics` | GET | `categories_analytics` | Requires auth. Renders the analytics page with summary cards, donut distribution, ranking, and full breakdown table. |
 
-### 8.7 Legal / Static
+### 8.7 Reports
+
+| Route | Methods | View function | Description |
+|---|---|---|---|
+| `/reports` | GET | `reports` | Requires auth. Renders the Reports dashboard with database-backed analytics. Supports optional `date_from`, `date_to`, `category`, and `payment` filters via GET query params. Computes summary cards, monthly trend, previous-period comparison, category & payment breakdowns, top expenses, monthly summary, and data-driven insights via `get_report_data`. |
+
+### 8.8 Budgets
+
+| Route | Methods | View function | Description |
+|---|---|---|---|
+| `/budgets` | GET | `budgets` | Requires auth. Renders the Budgets dashboard with database-backed analytics. Supports optional `month`, `category`, and `status` filters via GET query params. Computes budget progress cards, summary cards, Budget vs Actual trend, Budget Distribution donut, overview table, alerts/insights, and recent activity via `get_budget_data`. |
+
+> **Note:** There are **no CRUD routes** for budgets yet (no `/budgets/create`,
+> `/budgets/delete`, or `/budgets/reset` POST routes). The `budgets` table and
+> DB helpers exist, but the Budgets page currently uses static `BUDGET_LIMITS`
+> constants merged with any per-user rows.
+
+### 8.9 Legal / Static
 
 | Route | Methods | View function | Description |
 |---|---|---|---|
@@ -602,6 +703,8 @@ Every protected route calls `redirect_resp = login_required()` and returns `redi
 - **Expenses**: edit/delete use `WHERE id = ? AND user_id = ?`; route-level `abort(403)` when `expense["user_id"] != session["user_id"]`.
 - **Transactions**: all queries are scoped by `user_id`; bulk ops verify each id belongs to the user.
 - **Categories**: `get_category_by_id(category_id, user_id)`, `update_category(category_id, user_id, ...)`, `delete_category(category_id, user_id, ...)` all enforce ownership; routes `abort(404)` for missing/foreign resources.
+- **Reports**: all queries are scoped by `user_id`.
+- **Budgets**: all queries are scoped by `user_id`.
 
 ### 9.3 Google OAuth flow (Mermaid)
 
@@ -721,6 +824,18 @@ sequenceDiagram
 3. `get_user_expenses_summary(user_id, start_date, end_date)` returns totals, count, top category, category breakdown (by total desc), and last 5 expenses.
 4. Template renders stat cards, recent transactions table, and proportional category bars.
 
+### 10.9 Reports
+1. `GET /reports` — auth check.
+2. `_parse_report_filters()` reads and validates `date_from`, `date_to`, `category`, `payment`.
+3. `get_report_data(user_id, date_from, date_to, category, payment, months=6)` computes summary cards, monthly trend, previous-period comparison, category & payment breakdowns, top expenses, monthly summary, and insights.
+4. The template renders the filter bar, six summary cards, charts (line, bar, donuts), tables, and insights. `reports.js` renders the charts/tables client-side from `window.SPENDLY_REPORTS.report` and handles Export PDF / Export Excel.
+
+### 10.10 Budgets
+1. `GET /budgets` — auth check.
+2. `_parse_budget_filters()` reads and validates `month`, `category`, `status`.
+3. `get_budget_data(user_id, month, category, status)` computes per-category budgets (static `BUDGET_LIMITS` merged with per-user rows), summary cards, monthly trend, distribution, insights, and activity timeline.
+4. The template renders the filter bar, four summary cards, progress cards, charts, overview table, alerts/insights, and activity timeline. `budgets.js` renders these client-side from `window.SPENDLY_BUDGETS.budget` (with demo fallback data) and handles frontend-only filters, the demo Create Budget modal, and Export PDF / Export Excel.
+
 ---
 
 ## 11. Frontend
@@ -736,7 +851,7 @@ All pages extend `base.html`. `base.html` provides:
 For the public shell (not logged in), `base.html` renders the navbar/footer variant with `{% block content_pub %}`.
 
 ### 11.2 Sidebar navigation
-- Links: **Dashboard** (`/profile`), **Expenses** (`/expenses`), **Transactions** (`/transactions`), **Categories** (`/categories`), plus disabled "Soon" placeholders for Reports, Budgets, Goals, Settings, Help & Support.
+- Links: **Dashboard** (`/profile`), **Expenses** (`/expenses`), **Transactions** (`/transactions`), **Categories** (`/categories`), **Reports** (`/reports`), **Budgets** (`/budgets`), plus disabled "Soon" placeholders for Goals, Settings, and Help & Support.
 - The Categories link is active for all category endpoints (`categories`, `add_category`, `view_category`, `edit_category`, `delete_category_view`, `merge_categories_view`, `categories_export`, `categories_analytics`).
 - Mobile: hamburger opens a drawer with backdrop; close button + backdrop dismiss.
 
@@ -749,15 +864,17 @@ For the public shell (not logged in), `base.html` renders the navbar/footer vari
 
 ### 11.4 Styling conventions
 - **CSS custom properties** in `:root` define the design tokens (warm off-white background, green `--accent`, ink/paper/border palettes, fonts, radii).
-- Page-specific CSS lives in `static/css/{landing,profile,expenses,transactions,categories}.css` and is linked via `{% block head %}`.
+- Page-specific CSS lives in `static/css/{landing,profile,expenses,transactions,categories,reports,budgets}.css` and is linked via `{% block head %}`.
 - Category/transaction/payment badges use semantic classes (`cat-*`, `pay-*`) with per-item colors in both light and dark themes.
 - Donut chart is built with a server-computed `conic-gradient()` string passed via a CSS custom property `--donut`.
 - Responsive breakpoints: 1200px/900px/768px/640px/420px (grids collapse, tables scroll, layout stacks).
 
 ### 11.5 JavaScript
-- **`main.js`** — app shell behavior: sidebar collapse/toggle, mobile drawer, profile dropdown, theme persistence.
-- **`transactions.js`** — view modal (populated from `window.SPENDLY_TRANSACTIONS`), bulk selection + select-all, export link builder, activity feed.
+- **`main.js`** — app shell behavior: sidebar collapse/toggle, mobile drawer, profile dropdown, theme persistence, notification toggle, keyboard shortcut for search.
+- **`transactions.js`** — view modal (populated from `window.SPENDLY_TRANSACTIONS`), bulk selection + select-all, export link builder, activity feed timestamps, filter auto-submit.
 - **`categories.js`** — icon picker (Lucide grid → hidden input), color picker (preset palette → hidden input), debounced search auto-submit, sort/per-page auto-submit, reset filter, delete-confirmation checkbox state (button stays disabled until checked).
+- **`reports.js`** — renders server-computed report data (`window.SPENDLY_REPORTS.report`) into an SVG line chart, CSS bar chart, two CSS donut charts, and two tables; loading skeletons; filter interactions; Generate Report / Export PDF / Export Excel buttons; export toast.
+- **`budgets.js`** — renders server-computed budget data (`window.SPENDLY_BUDGETS.budget`) with a realistic demo fallback into progress cards, a Budget vs Actual bar chart, a Budget Distribution donut, an overview table, alerts/insights, and an activity timeline; frontend-only filters; demo Create Budget modal; Export PDF / Export Excel; toast.
 - **Theme switch persistence** and **Lucide icon initialization** are handled by inline scripts in `base.html`.
 
 ---
@@ -769,7 +886,7 @@ For the public shell (not logged in), `base.html` renders the navbar/footer vari
 - App configuration: `SECRET_KEY` from env with dev fallback.
 - OAuth registration for `google` with OpenID metadata URL.
 - DB init + seed + category backfill at import time inside `app.app_context()`.
-- Category-aware expense forms: the add/edit expense routes fetch the user's categories and pass them as the `categories` list (falling back to `CATEGORIES`).
+- Category-aware forms: the expense add/edit routes, the Transactions filter dropdown, the Reports filter dropdown, and the Budgets page all fetch the user's categories and pass them as the `categories` list (falling back to `CATEGORIES`).
 - All routes are module-level functions with a single responsibility (fetch data → render/redirect).
 
 ### 12.2 Database layer (`database/db.py`)
@@ -780,6 +897,9 @@ For the public shell (not logged in), `base.html` renders the navbar/footer vari
 - Category helpers populate usage statistics with `LEFT JOIN expenses ... GROUP BY c.id`.
 - `get_category_stats` computes summary cards, distribution (with rounded `pct`), a CSS `conic-gradient` string, and a top-8 ranking.
 - `update_category`/`merge_categories`/`delete_category` keep `expenses` and `activities` coherent on rename/merge/reassign.
+- `get_report_data` builds dynamic filters, computes summary cards, monthly trend, previous-period comparison, category & payment breakdowns, top expenses, monthly summary, and data-driven insights.
+- `get_budget_data` merges static `BUDGET_LIMITS` with per-user budget rows, computes per-category budgets with status, summary cards, monthly trend, distribution, insights, and activity timeline.
+- Budget CRUD helpers (`get_user_budgets`, `create_budget`, `update_budget_limit`, `delete_budget`, `reset_budget_defaults`) exist but are **not yet wired to any routes**.
 
 ### 12.3 Validation rules (server-side)
 | Field | Rule |
@@ -796,6 +916,11 @@ For the public shell (not logged in), `base.html` renders the navbar/footer vari
 | Category description | ≤ 160 characters |
 | Category icon | Must be in `CATEGORY_ICONS` |
 | Category color | Must be in `CATEGORY_COLORS` |
+| Report date filters | Validated `YYYY-MM-DD`; invalid values treated as unset |
+| Report payment filter | Must be in `PAYMENT_METHODS`, else `""` |
+| Budget month filter | Validated `YYYY-MM`; invalid values treated as unset |
+| Budget category filter | Must be in `BUDGET_LIMITS`, else `""` |
+| Budget status filter | Must be in `BUDGET_STATUSES`, else `""` |
 
 ---
 
@@ -883,7 +1008,7 @@ From `requirements.txt`:
 - **Foreign key enforcement** — `PRAGMA foreign_keys = ON` on every connection.
 - **OAuth email verification** — `google_callback` rejects accounts where `email_verified` is false.
 - **Account enumeration mitigation** — login shows a generic "Invalid email or password."; forgot-password shows a generic message.
-- **Ownership checks** — expenses/categories/transactions are scoped by `user_id` in SQL and route checks; cross-user access returns `abort(403)`/`abort(404)`.
+- **Ownership checks** — expenses/categories/transactions/reports/budgets are scoped by `user_id` in SQL and route checks; cross-user access returns `abort(403)`/`abort(404)`.
 - **Protected category deletion** — a category used by expenses requires a `confirm` checkbox; expenses are reassigned to **Other** rather than orphaned.
 - **Orphaned session cleanup** — `/profile` clears sessions whose `user_id` no longer exists.
 - **Server-side validation** — every POST re-validates inputs; HTML attributes are only a convenience.
@@ -914,6 +1039,9 @@ From `requirements.txt`:
 | Reset flow misuse | Missing `reset_user_id`/`security_question` session keys → flash + redirect to `/forgot-password`. |
 | Google OAuth failure | `try/except` around `authorize_access_token()` → flash + redirect to login. |
 | Invalid date format in filters | `datetime.strptime` fails → filter value treated as unset. |
+| Invalid month format in budget filter | `datetime.strptime` fails → month treated as unset. |
+| Invalid payment method in report filter | Not in `PAYMENT_METHODS` → treated as unset. |
+| Invalid status in budget filter | Not in `BUDGET_STATUSES` → treated as unset. |
 
 Flash categories used across the app: `"error"` and `"success"`. Templates render them via `get_flashed_messages(with_categories=true)` with CSS classes `auth-error` / `auth-success`.
 
@@ -975,6 +1103,9 @@ pytest --cov=app --cov=database   # coverage (requires pytest-cov)
 - `TestCategoryCRUDRoutes` — add page, valid/duplicate/invalid-icon/missing-name posts, edit page/updates, view page, 404, delete unused, delete in-use requires confirmation + reassigns.
 - `TestCategoryMergeExportAnalytics` — merge page, merge success, same-ids error, export CSV, analytics page.
 
+> **Note:** There are currently **no automated tests** for the Reports or
+> Budgets modules.
+
 ---
 
 ## 19. Deployment
@@ -1015,19 +1146,28 @@ Notes:
 | 10 | **SQLite concurrency** | SQLite is single-writer; fine for small scale, but not ideal for multi-instance production. |
 | 11 | **Inline `datetime` imports** | `profile` and `get_user_by_id` import `datetime` inline within functions — works, but non-idiomatic. |
 | 12 | **Expense list not paginated** | The `/expenses` list loads all rows at once (the Transactions ledger, by contrast, is paginated). |
+| 13 | **Budgets CRUD not implemented** | The `budgets` table and DB helpers exist, but there are no `/budgets/create`, `/budgets/delete`, or `/budgets/reset` POST routes. The Budgets page uses static `BUDGET_LIMITS` constants merged with any per-user rows. |
+| 14 | **Budgets page has demo fallback** | `budgets.js` falls back to hardcoded demo data when `window.SPENDLY_BUDGETS.budget` is absent. The Create Budget modal is demo-only (no backend persistence). Budget filters are frontend-only (client-side filtering of the rendered data, not server-side). |
+| 15 | **No tests for Reports/Budgets** | The test suite covers Dashboard, Transactions, and Categories only. There are no automated tests for the Reports or Budgets modules. |
+| 16 | **README/CLAUDE.md out of date** | `README.MD` and `CLAUDE.md` do not yet document the Reports or Budgets modules. |
 
 ---
 
 ## 21. Future Improvements
 
 - **Add CSRF protection** — integrate `flask-wtf` (or `Flask-WTF`'s CSRFProtect) with a per-form token, and convert logout to a POST form.
-- **Refactor routes into blueprints** — split `app.py` into `auth.py`, `profile.py`, `expenses.py`, `transactions.py`, `categories.py`, `main.py`.
+- **Refactor routes into blueprints** — split `app.py` into `auth.py`, `profile.py`, `expenses.py`, `transactions.py`, `categories.py`, `reports.py`, `budgets.py`, `main.py`.
 - **Adopt an ORM / migrations** — SQLAlchemy + Alembic (or Flask-Migrate) for schema versioning; support PostgreSQL for production.
 - **Harden sessions** — set `SESSION_COOKIE_HTTPONLY`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_SAMESITE`; require `SECRET_KEY` in production.
 - **Email infrastructure** — real password-reset via emailed tokens, email verification on signup.
 - **Rate limiting** — `flask-limiter` on auth and reset endpoints.
-- **Budgeting** — monthly budgets per category, alerts, savings goals.
-- **Reports module** — the sidebar already lists a "Reports" placeholder; build monthly/annual trend reports with charts.
+- **Budget CRUD routes** — implement `/budgets/create`, `/budgets/delete`, `/budgets/reset` POST routes using the existing DB helpers (`create_budget`, `update_budget_limit`, `delete_budget`, `reset_budget_defaults`).
+- **Budgets page server-side filters** — wire the month/category/status filters to the server via GET query params (currently frontend-only in `budgets.js`).
+- **Budgets page functional modal** — replace the demo Create Budget modal with a real form that persists to the `budgets` table.
+- **Budgets page remove demo fallback** — remove the hardcoded demo data fallback in `budgets.js` once the backend is fully wired.
+- **Reports/Budgets tests** — add automated tests for the Reports and Budgets modules (DB helpers + routes).
+- **Update README/CLAUDE.md** — document the Reports and Budgets modules in the user-facing and maintenance docs.
+- **Budgeting** — monthly budgets per category with user-defined limits, alerts, savings goals.
 - **Interactive charts** — a charting library (or richer CSS/SVG) for trend lines and drill-down analytics beyond the static donut/ranking.
 - **Expense list pagination** — paginate `/expenses` so large ledgers stay fast.
 - **Account management** — account deletion, data import, change security question.
@@ -1065,5 +1205,4 @@ demo@spendly.com / demo123
 
 ---
 
-*Documentation generated from the actual source code of the Spendly repository. Last verified against the current state of all files listed in §5 (Dashboard, Expenses, Transactions, and Categories modules all implemented).*
-
+*Documentation generated from the actual source code of the Spendly repository. Last verified against the current state of all files listed in §5 (Dashboard, Expenses, Transactions, Categories, Reports, and Budgets modules all implemented).*
