@@ -847,6 +847,23 @@ def get_user_budgets(user_id):
     return rows
 
 
+def get_budget_by_id(budget_id, user_id):
+    """Return a single budget row scoped to the user, or None if not found/owned.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, category, limit_amount, period, is_default, created_at "
+        "FROM budgets WHERE id = ? AND user_id = ?",
+        (budget_id, user_id),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
 def create_budget(user_id, category, limit):
     """Create a per-user budget row for a category and return its id.
 

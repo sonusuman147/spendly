@@ -42,8 +42,16 @@ update_category as db_update_category,
 # Budgets module
     get_budget_data as db_get_budget_data,
     get_budget_months as db_get_budget_months,
+    get_user_budgets as db_get_user_budgets,
+    get_budget_by_id as db_get_budget_by_id,
+    create_budget as db_create_budget,
+    update_budget_limit as db_update_budget_limit,
+    delete_budget as db_delete_budget,
+    reset_budget_defaults as db_reset_budget_defaults,
     BUDGET_STATUSES,
     BUDGET_LIMITS,
+    BUDGET_CATEGORY_ICONS,
+    BUDGET_CATEGORY_COLORS,
 )
 
 # Python standard library
@@ -1596,8 +1604,6 @@ def _parse_budget_filters():
       - category: str (must be a known budget category, else "")
       - status: str (must be in BUDGET_STATUSES, else "")
     """
-    from database.db import BUDGET_LIMITS
-
     month = request.args.get("month", "").strip()
     # Validate the month format (YYYY-MM) — invalid values are ignored.
     if month:
@@ -1633,11 +1639,12 @@ def _budget_query_args(filters):
 def budgets():
     """Render the Budgets dashboard with database-backed analytics.
 
-    Budget limits come from static BUDGET_LIMITS constants; actual spending
-    is computed from the user's real expense rows. Supports optional month,
-    category, and status filters via GET query parameters. Returns budget
-    progress cards, Budget vs Actual trend, Budget Distribution donut, an
-    overview table, alerts/insights, and recent activity.
+    Budget limits come from the user's per-category budgets table (falling
+    back to the static BUDGET_LIMITS defaults). Actual spending is computed
+    from the user's real expense rows. Supports optional month, category,
+    and status filters via GET query parameters. Returns budget progress
+    cards, Budget vs Actual trend, Budget Distribution donut, an overview
+    table, alerts/insights, quick actions, and recent activity.
     """
     redirect_resp = login_required()
     if redirect_resp:
@@ -1666,8 +1673,163 @@ def budgets():
         months=all_months,
         budget_categories=list(BUDGET_LIMITS.keys()),
         budget_statuses=list(BUDGET_STATUSES),
+        budget_icons=BUDGET_CATEGORY_ICONS,
+        budget_colors=BUDGET_CATEGORY_COLORS,
         filters=filters,
         query_args=_budget_query_args(filters),
+    )
+
+
+@app.route("/budgets/add", methods=["POST"])
+def add_budget():
+    """Create (or upsert) a per-user budget for a category.
+
+    Validates the category against BUDGET_LIMITS and the limit as a
+    positive number. Uses an upsert so creating a budget for a category
+    that already exists simply updates the limit. Redirects back to
+    /budgets preserving the active filter state."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    category = request.form.get("category", "").strip()
+    limit_raw = request.form.get("limit_amount", "").strip()
+
+    # Validate category.
+    if category not in BUDGET_LIMITS:
+        flash("Please select a valid category.", "error")
+        return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+    # Validate limit.
+    try:
+        limit = float(limit_raw)
+        if limit <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash("Budget limit must be a positive number.", "error")
+        return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+    try:
+        db_create_budget(user_id, category, limit)
+    except sqlite3.IntegrityError:
+        flash("Could not save the budget — please try again.", "error")
+        return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+    flash(f"{category} budget set to ₹{limit:,.2f}/month.", "success")
+    return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+
+@app.route("/budgets/<int:budget_id>/edit", methods=["POST"])
+def edit_budget(budget_id):
+    """Update an existing per-user budget limit (ownership enforced).
+
+    Validates the limit as a positive number. Returns 404 if the row does
+    not exist, 403 if it belongs to another user.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    budget = db_get_budget_by_id(budget_id, session["user_id"])
+    if budget is None:
+        abort(404)
+
+    limit_raw = request.form.get("limit_amount", "").strip()
+    try:
+        limit = float(limit_raw)
+        if limit <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash("Budget limit must be a positive number.", "error")
+        return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+    updated = db_update_budget_limit(session["user_id"], budget["category"], limit)
+    if not updated:
+        abort(403)
+
+    flash(f"{budget['category']} budget updated to ₹{limit:,.2f}/month.", "success")
+    return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+
+@app.route("/budgets/<int:budget_id>/delete", methods=["POST"])
+def delete_budget_view(budget_id):
+    """Delete a per-user budget row (ownership enforced).
+
+    After deletion the category falls back to its static default limit.
+    Returns 404 if the row does not exist, 403 if it belongs to another user.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    budget = db_get_budget_by_id(budget_id, session["user_id"])
+    if budget is None:
+        abort(404)
+
+    deleted = db_delete_budget(session["user_id"], budget["category"])
+    if not deleted:
+        abort(403)
+
+    flash(f"{budget['category']} budget deleted — using default limit.", "success")
+    return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+
+@app.route("/budgets/reset", methods=["POST"])
+def reset_budgets():
+    """Reset all per-user budget rows so defaults are used again.
+
+    Removes every user-defined budget row; the page then shows the static
+    BUDGET_LIMITS defaults. Returns the number of rows removed.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    removed = db_reset_budget_defaults(session["user_id"])
+    if removed == 0:
+        flash("Budgets were already using defaults.", "success")
+    else:
+        flash(f"Reset {removed} budget(s) to defaults.", "success")
+    return redirect(url_for("budgets", **_budget_query_args(_parse_budget_filters())))
+
+
+@app.route("/budgets/export")
+def budgets_export():
+    """Export the user's budgets (effective limits) as a CSV file.
+
+    For each configured budget category, exports the category, monthly
+    limit, spent, remaining, usage percentage, and status. Returns a
+    text/csv attachment.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    budget_data = db_get_budget_data(user_id)
+    budgets_list = budget_data["budgets"]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Category", "Monthly Limit", "Spent", "Remaining", "Usage %", "Status",
+    ])
+    for b in budgets_list:
+        writer.writerow([
+            b["name"],
+            f"{b['limit']:.2f}",
+            f"{b['spent']:.2f}",
+            f"{b['remaining']:.2f}",
+            f"{b['pct']:.1f}",
+            b["status_label"],
+        ])
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spendly-budgets.csv"},
     )
 
 
