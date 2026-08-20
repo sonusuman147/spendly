@@ -29,67 +29,73 @@
                 <i data-lucide="plus" width="18" height="18"></i>
                 Create Budget
             </button>
-            <button type="button" class="btn-export" data-export-pdf title="Download budgets as PDF">
-                <i data-lucide="file-text" width="18" height="18"></i>
-                Export PDF
-            </button>
-            <button type="button" class="btn-export" data-export-excel title="Download budgets as Excel">
-                <i data-lucide="file-spreadsheet" width="18" height="18"></i>
-                Export Excel
-            </button>
+            <a href="{{ url_for('budgets_export') }}" class="btn-export" title="Download budgets as CSV">
+                <i data-lucide="download" width="18" height="18"></i>
+                Export
+            </a>
+            <form method="POST" action="{{ url_for('reset_budgets') }}" class="budget-reset-form" data-budget-reset>
+                <button type="submit" class="btn-export" title="Reset all budgets to defaults">
+                    <i data-lucide="rotate-ccw" width="18" height="18"></i>
+                    Reset Defaults
+                </button>
+            </form>
         </div>
     </div>
 
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
     <!-- ============ Filter Bar ============ -->
-    <form class="budgets-filter-bar" id="budgetFilterForm">
+    <form class="budgets-filter-bar" id="budgetFilterForm" method="GET" action="{{ url_for('budgets') }}">
         <div class="budgets-filter-grid">
             <label class="bgt-filter-field">
                 <span class="bgt-filter-label">Month</span>
                 <select name="month" id="budgetMonth" class="filter-select">
-                    <option value="all">All months</option>
-                    <option value="jan">January</option>
-                    <option value="feb">February</option>
-                    <option value="mar">March</option>
-                    <option value="apr">April</option>
-                    <option value="may">May</option>
-                    <option value="jun">June</option>
-                    <option value="jul">July</option>
-                    <option value="aug">August</option>
-                    <option value="sep">September</option>
-                    <option value="oct">October</option>
-                    <option value="nov">November</option>
-                    <option value="dec">December</option>
+                    <option value="">All months</option>
+                    {% for m in months %}
+                    <option value="{{ m.value }}" {% if filters.month == m.value %}selected{% endif %}>{{ m.label }}</option>
+                    {% endfor %}
                 </select>
             </label>
             <label class="bgt-filter-field">
                 <span class="bgt-filter-label">Category</span>
                 <select name="category" id="budgetCategory" class="filter-select">
-                    <option value="all">All categories</option>
-                    <option value="food" data-cat="food">Food &amp; Dining</option>
-                    <option value="transport" data-cat="transport">Transport</option>
-                    <option value="bills" data-cat="bills">Bills &amp; Utilities</option>
-                    <option value="health" data-cat="health">Health</option>
-                    <option value="entertainment" data-cat="entertainment">Entertainment</option>
-                    <option value="shopping" data-cat="shopping">Shopping</option>
+                    <option value="">All categories</option>
+                    {% for cat in budget_categories %}
+                    <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
                 </select>
             </label>
             <label class="bgt-filter-field">
                 <span class="bgt-filter-label">Status</span>
                 <select name="status" id="budgetStatus" class="filter-select">
-                    <option value="all">All statuses</option>
-                    <option value="on-track">On Track</option>
-                    <option value="warning">At Risk</option>
-                    <option value="over">Over Budget</option>
+                    <option value="">All statuses</option>
+                    {% for status in budget_statuses %}
+                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>
+                        {% if status == 'on-track' %}On Track{% elif status == 'warning' %}At Risk{% else %}Over Budget{% endif %}
+                    </option>
+                    {% endfor %}
                 </select>
             </label>
         </div>
         <div class="budgets-filter-footer">
-            <span class="filter-result-count" id="budgetResultCount">Showing all budgets</span>
+            <span class="filter-result-count" id="budgetResultCount">
+                {% if filters.month or filters.category or filters.status %}
+                    Showing {{ budget.budgets|length }} budget{{ 's' if budget.budgets|length != 1 else '' }}
+                {% else %}
+                    Showing all budgets
+                {% endif %}
+            </span>
             <div class="budgets-filter-actions">
-                <button type="button" class="filter-reset-btn" id="budgetFilterReset">
+                <a href="{{ url_for('budgets') }}" class="filter-reset-btn" id="budgetFilterReset">
                     <i data-lucide="rotate-ccw" width="14" height="14"></i>
                     Reset
-                </button>
+                </a>
                 <button type="submit" class="filter-apply-btn">
                     <i data-lucide="filter" width="14" height="14"></i>
                     Apply
@@ -99,6 +105,7 @@
     </form>
 
     <!-- ============ Summary Cards (4) ============ -->
+    {% set s = budget.summary %}
     <div class="budgets-stats" id="budgetSummaryGrid">
         <div class="stat-card bgt-stat-card">
             <div class="stat-card-top">
@@ -106,8 +113,8 @@
                 <span class="stat-change positive">Limit</span>
             </div>
             <div class="stat-label">Monthly Budget</div>
-            <div class="stat-value" data-stat="totalBudget">₹0</div>
-            <div class="stat-delta">across 6 active budgets</div>
+            <div class="stat-value" data-stat="totalBudget">₹{{ "%.2f"|format(s.total_budget) }}</div>
+            <div class="stat-delta">across {{ budget.budgets|length }} active budget{{ 's' if budget.budgets|length != 1 else '' }}</div>
         </div>
         <div class="stat-card bgt-stat-card">
             <div class="stat-card-top">
@@ -115,8 +122,8 @@
                 <span class="stat-change negative">Spent</span>
             </div>
             <div class="stat-label">Total Spent</div>
-            <div class="stat-value" data-stat="totalSpent">₹0</div>
-            <div class="stat-delta" data-stat="spentPct">0% of budget used</div>
+            <div class="stat-value" data-stat="totalSpent">₹{{ "%.2f"|format(s.total_spent) }}</div>
+            <div class="stat-delta" data-stat="spentPct">{{ "%.1f"|format(s.pct) }}% of budget used</div>
         </div>
         <div class="stat-card bgt-stat-card">
             <div class="stat-card-top">
@@ -124,8 +131,8 @@
                 <span class="stat-change success">Left</span>
             </div>
             <div class="stat-label">Remaining</div>
-            <div class="stat-value" data-stat="remaining">₹0</div>
-            <div class="stat-delta" data-stat="daily">₹0 / day left</div>
+            <div class="stat-value" data-stat="remaining">₹{{ "%.2f"|format(s.remaining) }}</div>
+            <div class="stat-delta" data-stat="daily">₹{{ "%.2f"|format(s.daily) }} / day left</div>
         </div>
         <div class="stat-card bgt-stat-card">
             <div class="stat-card-top">
@@ -133,8 +140,8 @@
                 <span class="stat-change neutral">Active</span>
             </div>
             <div class="stat-label">Over Budget</div>
-            <div class="stat-value stat-value-sm" data-stat="overCount">0</div>
-            <div class="stat-delta">budgets need attention</div>
+            <div class="stat-value stat-value-sm" data-stat="overCount">{{ s.over_count }}</div>
+            <div class="stat-delta">budget{{ 's' if s.over_count != 1 else '' }} need attention</div>
         </div>
     </div>
 
@@ -145,11 +152,50 @@
                 <i data-lucide="gauge" class="budget-section-icon"></i>
                 <h2 class="budget-section-heading">Budget Progress</h2>
             </div>
-            <span class="activity-chip">This month</span>
+            <span class="activity-chip">{{ budget.filter_info.month or 'This month' }}</span>
         </div>
+        {% if budget.budgets %}
         <div class="budget-progress-grid" id="budgetProgressGrid">
-            <!-- Cards rendered by budgets.js -->
+            {% for b in budget.budgets %}
+            <div class="budget-progress-card" style="--bp-accent: {{ b.color }}">
+                <div class="budget-progress-top">
+                    <div class="budget-progress-cat">
+                        <span class="budget-progress-swatch"><i data-lucide="{{ b.icon }}"></i></span>
+                        <div class="budget-progress-copy">
+                            <div class="budget-progress-name">{{ b.name }}</div>
+                            <div class="budget-progress-period">{{ b.period }}</div>
+                        </div>
+                    </div>
+                    <div class="budget-progress-pct{% if b.status_key == 'over' %} is-over{% elif b.status_key == 'warning' %} is-warning{% endif %}">
+                        {{ "%.0f"|format(b.pct) }}%
+                    </div>
+                </div>
+                <div class="budget-progress-track">
+                    <div class="budget-progress-fill{% if b.status_key == 'over' %} is-over{% endif %}" data-fill data-pct="{{ [b.pct, 100]|min }}"></div>
+                </div>
+                <div class="budget-progress-meta">
+                    <span class="budget-progress-spent"><strong>₹{{ "%.2f"|format(b.spent) }}</strong> of ₹{{ "%.2f"|format(b.limit) }}</span>
+                    <span class="budget-progress-left{% if b.remaining < 0 %} is-neg{% endif %}">
+                        {% if b.remaining < 0 %}₹{{ "%.2f"|format(b.remaining|abs) }} over{% else %}₹{{ "%.2f"|format(b.remaining) }} left{% endif %}
+                    </span>
+                </div>
+                <div>
+                    <span class="budget-status {{ b.status_key }}">
+                        <i data-lucide="{% if b.status_key == 'over' %}alert-octagon{% elif b.status_key == 'warning' %}alert-circle{% else %}check-circle{% endif %}"></i>
+                        {{ b.status_label }}
+                    </span>
+                </div>
+            </div>
+            {% endfor %}
         </div>
+        {% else %}
+        <div class="budget-empty">
+            <div class="budget-empty-icon"><i data-lucide="piggy-bank" width="48" height="48"></i></div>
+            <h2 class="budget-empty-title">No budgets match your filters</h2>
+            <p class="budget-empty-text">Try adjusting or clearing your filters to see all budgets.</p>
+            <a href="{{ url_for('budgets') }}" class="btn-ghost">Reset filters</a>
+        </div>
+        {% endif %}
     </div>
 
     <!-- ============ Charts Layout ============ -->
@@ -165,9 +211,24 @@
                 <span class="activity-chip">Monthly</span>
             </div>
             <div class="dashboard-card-body">
-                <div class="budget-chart-skeleton" data-chart-skeleton></div>
-                <div class="budget-bars-chart" data-bars-chart hidden>
-                    <div class="budget-bars" data-budget-bars></div>
+                <div class="budget-bars-chart" data-bars-chart>
+                    <div class="budget-bars" data-budget-bars>
+                        {% for m in budget.monthly_trend %}
+                        {% set max_val = [m.budget, m.actual]|max %}
+                        {% set chart_max = (max_val * 1.1) if max_val > 0 else 1 %}
+                        <div class="budget-bar-col">
+                            <div class="budget-bar-pair">
+                                <div class="budget-bar" style="height: {{ [4, (m.budget / chart_max * 100)]|max }}%;" title="Budget: ₹{{ '%.2f'|format(m.budget) }}">
+                                    <span class="budget-bar-tooltip">Budget ₹{{ "%.2f"|format(m.budget) }}</span>
+                                </div>
+                                <div class="budget-bar is-actual{% if m.actual > m.budget %} is-over{% endif %}" style="height: {{ [4, (m.actual / chart_max * 100)]|max }}%;" title="Actual: ₹{{ '%.2f'|format(m.actual) }}">
+                                    <span class="budget-bar-tooltip">Actual ₹{{ "%.2f"|format(m.actual) }}</span>
+                                </div>
+                            </div>
+                            <div class="budget-bar-label">{{ m.label }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
                     <div class="report-bars-legend">
                         <span class="report-bars-legend-item"><span class="report-bars-legend-dot"></span>Budget</span>
                         <span class="report-bars-legend-item"><span class="report-bars-legend-dot is-prev"></span>Actual</span>
@@ -186,16 +247,35 @@
                 <span class="activity-chip">Share</span>
             </div>
             <div class="dashboard-card-body">
-                <div class="budget-chart-skeleton" data-chart-skeleton></div>
-                <div class="budget-donut-wrap" data-category-donut hidden>
-                    <div class="report-donut" data-category-donut-ring>
+                {% if budget.distribution %}
+                {% set ns = namespace(stops=[], acc=0) %}
+                {% for d in budget.distribution %}
+                    {% set pct = (d.limit / s.total_budget * 100) if s.total_budget > 0 else 0 %}
+                    {% set _ = ns.stops.append(d.color ~ " " ~ ns.acc ~ "% " ~ (ns.acc + pct) ~ "%") %}
+                    {% set ns.acc = ns.acc + pct %}
+                {% endfor %}
+                <div class="budget-donut-wrap" data-category-donut>
+                    <div class="report-donut" data-category-donut-ring style="background: conic-gradient({{ ns.stops | join(', ') }});">
                         <div class="report-donut-center">
-                            <span class="report-donut-total" data-category-donut-total>₹0</span>
+                            <span class="report-donut-total" data-category-donut-total>₹{{ "%.0f"|format(s.total_budget) }}</span>
                             <span class="report-donut-label">Total budget</span>
                         </div>
                     </div>
-                    <ul class="report-legend" data-category-legend></ul>
+                    <ul class="report-legend" data-category-legend>
+                        {% for d in budget.distribution %}
+                        {% set pct = (d.limit / s.total_budget * 100) if s.total_budget > 0 else 0 %}
+                        <li class="report-legend-item">
+                            <span class="report-legend-dot" style="background: {{ d.color }};"></span>
+                            <span class="report-legend-name">{{ d.name }}</span>
+                            <span class="report-legend-pct">{{ "%.0f"|format(pct) }}%</span>
+                            <span class="report-legend-amount">₹{{ "%.2f"|format(d.limit) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
                 </div>
+                {% else %}
+                <p class="budget-empty-text budget-no-data">No budget data to display.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -210,8 +290,8 @@
             <span class="activity-chip">All budgets</span>
         </div>
         <div class="dashboard-card-body">
-            <div class="budget-chart-skeleton budget-table-skeleton" data-chart-skeleton></div>
-            <div class="budget-table-scroll" data-budget-table hidden>
+            {% if budget.budgets %}
+            <div class="budget-table-scroll" data-budget-table>
                 <table class="budget-table">
                     <thead>
                         <tr>
@@ -222,11 +302,61 @@
                             <th class="amount-col">Remaining</th>
                             <th>Progress</th>
                             <th>Status</th>
+                            <th class="actions-col">Actions</th>
                         </tr>
                     </thead>
-                    <tbody data-budget-table-body></tbody>
+                    <tbody data-budget-table-body>
+                        {% for b in budget.budgets %}
+                        <tr>
+                            <td>
+                                <div class="budget-cell">
+                                    <span class="budget-cell-swatch" style="--bp-accent: {{ b.color }}"><i data-lucide="{{ b.icon }}"></i></span>
+                                    <span class="budget-cell-name">{{ b.name }}</span>
+                                </div>
+                            </td>
+                            <td><span class="budget-period-tag">{{ b.period }}</span></td>
+                            <td class="amount-col">₹{{ "%.2f"|format(b.limit) }}</td>
+                            <td class="amount-col{% if b.status_key == 'over' %} budget-table-amount-neg{% endif %}">₹{{ "%.2f"|format(b.spent) }}</td>
+                            <td class="amount-col{% if b.remaining < 0 %} budget-table-amount-neg{% endif %}">
+                                {% if b.remaining < 0 %}-₹{{ "%.2f"|format(b.remaining|abs) }}{% else %}₹{{ "%.2f"|format(b.remaining) }}{% endif %}
+                            </td>
+                            <td>
+                                <div class="budget-table-progress">
+                                    <div class="budget-progress-track">
+                                        <div class="budget-progress-fill{% if b.status_key == 'over' %} is-over{% endif %}" data-fill data-pct="{{ [b.pct, 100]|min }}" style="--bp-accent: {{ b.color }}"></div>
+                                    </div>
+                                    <span>{{ "%.0f"|format(b.pct) }}%</span>
+                                </div>
+                            </td>
+                            <td>
+                                <span class="budget-status {{ b.status_key }}">
+                                    <i data-lucide="{% if b.status_key == 'over' %}alert-octagon{% elif b.status_key == 'warning' %}alert-circle{% else %}check-circle{% endif %}"></i>
+                                    {{ b.status_label }}
+                                </span>
+                            </td>
+                            <td class="actions-col">
+                                <span class="txn-actions">
+                                    <button type="button" class="txn-icon-btn" data-budget-edit="{{ b.name }}" data-budget-id="{{ b.id }}" data-budget-limit="{{ b.limit }}" title="Edit budget" aria-label="Edit {{ b.name }} budget">
+                                        <i data-lucide="pencil" width="15" height="15"></i>
+                                    </button>
+                                    <button type="button" class="txn-icon-btn txn-icon-btn-danger" data-budget-delete="{{ b.name }}" data-budget-id="{{ b.id }}" title="Delete budget" aria-label="Delete {{ b.name }} budget">
+                                        <i data-lucide="trash-2" width="15" height="15"></i>
+                                    </button>
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
                 </table>
             </div>
+            {% else %}
+            <div class="budget-empty">
+                <div class="budget-empty-icon"><i data-lucide="table-2" width="48" height="48"></i></div>
+                <h2 class="budget-empty-title">No budgets to display</h2>
+                <p class="budget-empty-text">Create a budget to start tracking your spending limits.</p>
+                <button type="button" class="btn-budget" data-budget-create>Create Budget</button>
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -234,10 +364,18 @@
     <div class="budgets-insights" id="budgetAlerts">
         <div class="reports-insights-title">
             <i data-lucide="lightbulb" class="reports-insights-icon"></i>
-            <h2 class="reports-insights-heading">Alerts &amp; Insights</h2>
+            <h2 class="reports-insights-heading">Alerts & Insights</h2>
         </div>
         <div class="reports-insights-grid" data-alerts-grid>
-            <!-- Alerts rendered by budgets.js -->
+            {% for insight in budget.insights %}
+            <div class="insight-card" style="--insight-accent: {{ insight.accent }}">
+                <div class="insight-icon"><i data-lucide="{{ insight.icon }}"></i></div>
+                <div class="insight-body">
+                    <h3 class="insight-title">{{ insight.title }}</h3>
+                    <p class="insight-text">{{ insight.text }}</p>
+                </div>
+            </div>
+            {% endfor %}
         </div>
     </div>
 
@@ -251,9 +389,27 @@
             <span class="activity-chip">Timeline</span>
         </div>
         <div class="dashboard-card-body">
+            {% if budget.activity %}
             <ol class="budget-timeline" data-budget-timeline>
-                <!-- Timeline items rendered by budgets.js -->
+                {% for act in budget.activity %}
+                {% set is_alert = act.action == 'deleted' %}
+                {% set cls = 'alert' if is_alert else ('edited' if act.action == 'edited' else 'added') %}
+                <li class="budget-timeline-item{% if is_alert %} is-over{% elif act.action == 'edited' %} is-warning{% endif %}">
+                    <span class="budget-timeline-icon {{ cls }}"><i data-lucide="{% if is_alert %}alert-circle{% else %}circle-check{% endif %}"></i></span>
+                    <div class="budget-timeline-body">
+                        <p class="budget-timeline-text">
+                            <strong>{{ act.category or 'Budget' }}</strong>
+                            {% if act.description %} — {{ act.description }}{% endif %}
+                            {% if act.amount %} of ₹{{ "%.2f"|format(act.amount) }}{% endif %}
+                        </p>
+                        <div class="budget-timeline-meta">{{ act.time_label }}</div>
+                    </div>
+                </li>
+                {% endfor %}
             </ol>
+            {% else %}
+            <p class="budget-empty-text budget-no-data">No budget activity yet. Create or adjust a budget to see it here.</p>
+            {% endif %}
         </div>
     </div>
 
@@ -261,7 +417,7 @@
     <div class="budgets-quick">
         <h3 class="reports-quick-title">Quick Actions</h3>
         <div class="reports-quick-grid">
-            <a href="#" class="quick-action-card" data-quick-action>
+            <button type="button" class="quick-action-card" data-quick-action data-budget-create>
                 <div class="quick-action-icon" style="--qa-accent: var(--accent)">
                     <i data-lucide="plus"></i>
                 </div>
@@ -269,8 +425,8 @@
                     <h4 class="quick-action-name">Create Budget</h4>
                     <p class="quick-action-desc">Set a new monthly spending limit.</p>
                 </div>
-            </a>
-            <a href="#" class="quick-action-card" data-quick-action>
+            </button>
+            <button type="button" class="quick-action-card" data-quick-action data-budget-edit-first>
                 <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
                     <i data-lucide="pencil"></i>
                 </div>
@@ -278,60 +434,79 @@
                     <h4 class="quick-action-name">Adjust Limit</h4>
                     <p class="quick-action-desc">Tune a budget to match your goals.</p>
                 </div>
-            </a>
-            <a href="#" class="quick-action-card" data-quick-action>
+            </button>
+            <button type="button" class="quick-action-card" data-quick-action data-budget-reset-quick>
                 <div class="quick-action-icon" style="--qa-accent: var(--success)">
-                    <i data-lucide="repeat"></i>
+                    <i data-lucide="rotate-ccw"></i>
                 </div>
                 <div class="quick-action-body">
-                    <h4 class="quick-action-name">Roll Over</h4>
-                    <p class="quick-action-desc">Carry unused budget into next month.</p>
+                    <h4 class="quick-action-name">Reset Defaults</h4>
+                    <p class="quick-action-desc">Restore all budgets to default limits.</p>
                 </div>
-            </a>
-            <a href="#" class="quick-action-card" data-quick-action>
+            </button>
+            <a href="{{ url_for('budgets_export') }}" class="quick-action-card">
                 <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
-                    <i data-lucide="file-text"></i>
+                    <i data-lucide="download"></i>
                 </div>
                 <div class="quick-action-body">
                     <h4 class="quick-action-name">Export Report</h4>
-                    <p class="quick-action-desc">Download your budget summary.</p>
+                    <p class="quick-action-desc">Download your budget summary as CSV.</p>
                 </div>
             </a>
         </div>
     </div>
 
-    <!-- ============ Demo Modal (Create Budget) ============ -->
+    <!-- ============ Create Budget Modal ============ -->
     <div class="txn-modal budget-modal" data-budget-modal hidden>
         <div class="txn-modal-backdrop" data-modal-close></div>
         <div class="txn-modal-panel">
             <div class="txn-modal-head">
-                <h3 class="txn-modal-title">Create Budget</h3>
+                <h3 class="txn-modal-title" data-budget-modal-title>Create Budget</h3>
                 <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
                     <i data-lucide="x"></i>
                 </button>
             </div>
             <div class="txn-modal-body">
-                <form id="budgetCreateForm">
+                <form method="POST" action="{{ url_for('add_budget') }}" id="budgetForm">
                     <div class="bgt-form-grid">
                         <label class="bgt-filter-field">
                             <span class="bgt-filter-label">Category</span>
-                            <select class="filter-select" required>
-                                <option value="food">Food &amp; Dining</option>
-                                <option value="transport">Transport</option>
-                                <option value="bills">Bills &amp; Utilities</option>
-                                <option value="health">Health</option>
-                                <option value="entertainment">Entertainment</option>
-                                <option value="shopping">Shopping</option>
+                            <select name="category" id="budgetFormCategory" class="filter-select" required>
+                                {% for cat in budget_categories %}
+                                <option value="{{ cat }}">{{ cat }}</option>
+                                {% endfor %}
                             </select>
                         </label>
                         <label class="bgt-filter-field">
                             <span class="bgt-filter-label">Monthly Limit (₹)</span>
-                            <input type="number" class="filter-input" placeholder="5000" min="0" step="100" required>
+                            <input type="number" name="limit_amount" id="budgetFormLimit" class="filter-input" placeholder="5000" min="1" step="100" required>
                         </label>
                     </div>
                     <div class="bgt-modal-actions">
                         <button type="button" class="btn-export" data-modal-close>Cancel</button>
-                        <button type="submit" class="btn-budget">Create Budget</button>
+                        <button type="submit" class="btn-budget" data-budget-submit>Create Budget</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Delete Budget Modal ============ -->
+    <div class="txn-modal budget-modal" data-budget-delete-modal hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title">Delete Budget</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body">
+                <p class="budget-delete-text" data-budget-delete-text>Are you sure you want to delete this budget?</p>
+                <form method="POST" action="" id="budgetDeleteForm">
+                    <div class="bgt-modal-actions">
+                        <button type="button" class="btn-export" data-modal-close>Cancel</button>
+                        <button type="submit" class="btn-budget btn-budget-danger">Delete Budget</button>
                     </div>
                 </form>
             </div>
@@ -341,7 +516,7 @@
     <!-- ============ Toast ============ -->
     <div class="report-toast" data-budget-toast hidden>
         <i data-lucide="check-circle" class="report-toast-icon"></i>
-        <span class="report-toast-text" data-budget-toast-text>Budget created successfully</span>
+        <span class="report-toast-text" data-budget-toast-text>Budget saved successfully</span>
     </div>
 
 </section>
@@ -350,10 +525,16 @@
 
 {% block scripts %}
 <script>
-    // Pass the server-computed budget data to the frontend renderer.
-    // The JS falls back to realistic demo data if this is absent.
+    // Pass the server-computed budget data and URL builders to the frontend.
     window.SPENDLY_BUDGETS = {
-        budget: {{ budget | tojson }}
+        budget: {{ budget | tojson }},
+        urls: {
+            add: {{ url_for('add_budget') | tojson }},
+            edit: {{ url_for('edit_budget', budget_id=0) | tojson }},
+            delete: {{ url_for('delete_budget_view', budget_id=0) | tojson }},
+            reset: {{ url_for('reset_budgets') | tojson }},
+            export: {{ url_for('budgets_export') | tojson }}
+        }
     };
 </script>
 <script src="{{ url_for('static', filename='js/budgets.js') }}"></script>

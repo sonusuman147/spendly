@@ -788,11 +788,135 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* Empty State                                                         */
+/* ------------------------------------------------------------------ */
+
+.budget-empty {
+    text-align: center;
+    padding: 2.5rem 1rem;
+    color: var(--ink-muted);
+    font-size: 0.9rem;
+}
+
+.budget-empty-icon {
+    font-size: 2.5rem;
+    color: var(--ink-faint);
+    margin-bottom: 0.75rem;
+}
+
+.budget-empty-title {
+    font-family: var(--font-display);
+    font-size: 1.1rem;
+    color: var(--ink-soft);
+    margin-bottom: 0.35rem;
+}
+
+.budget-empty-text {
+    font-size: 0.85rem;
+    line-height: 1.55;
+    margin-bottom: 1rem;
+}
+
+.budget-no-data {
+    text-align: center;
+    padding: 1.5rem 1rem;
+    color: var(--ink-muted);
+}
+
+/* ------------------------------------------------------------------ */
 /* Quick Actions                                                       */
 /* ------------------------------------------------------------------ */
 
 .budgets-quick {
     margin-bottom: 0.5rem;
+}
+
+.budgets-quick .quick-action-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    padding: 1.1rem 1.15rem;
+    background: var(--paper-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-xs);
+    transition: transform var(--duration-med) var(--ease-out), box-shadow var(--duration-med) var(--ease-out), border-color var(--duration-med) ease;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-body);
+    width: 100%;
+}
+
+.budgets-quick .quick-action-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-sm);
+    border-color: color-mix(in srgb, var(--qa-accent, var(--accent)) 30%, var(--border));
+}
+
+.budgets-quick .quick-action-card .quick-action-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: color-mix(in srgb, var(--qa-accent, var(--accent)) 12%, transparent);
+    color: var(--qa-accent, var(--accent));
+}
+
+.budgets-quick .quick-action-card .quick-action-icon i { width: 19px; height: 19px; }
+
+.budgets-quick .quick-action-card .quick-action-body { min-width: 0; }
+
+.budgets-quick .quick-action-card .quick-action-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 0.3rem;
+    letter-spacing: -0.01em;
+    line-height: 1.35;
+}
+
+.budgets-quick .quick-action-card .quick-action-desc {
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+    line-height: 1.55;
+}
+
+/* ------------------------------------------------------------------ */
+/* Reset form + danger button                                          */
+/* ------------------------------------------------------------------ */
+
+.budget-reset-form {
+    display: inline-flex;
+    margin: 0;
+}
+
+.budget-reset-form .btn-export {
+    border-color: var(--danger-light);
+    color: var(--danger);
+}
+
+.budget-reset-form .btn-export:hover {
+    border-color: var(--danger);
+    background: var(--danger-light);
+}
+
+.btn-budget-danger {
+    background: var(--danger);
+}
+
+.btn-budget-danger:hover {
+    background: var(--danger);
+    filter: brightness(0.9);
+}
+
+.budget-delete-text {
+    font-size: 0.9rem;
+    color: var(--ink-soft);
+    line-height: 1.6;
+    margin-bottom: 1.25rem;
 }
 
 /* ------------------------------------------------------------------ */
