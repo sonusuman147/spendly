@@ -112,6 +112,45 @@ BUDGET_STATUSES = ("on-track", "warning", "over")
 # Number of months shown in the Budget vs Actual trend chart.
 BUDGET_TREND_MONTHS = 6
 
+# ------------------------------------------------------------------ #
+# Goals module constants                                             #
+# ------------------------------------------------------------------ #
+
+# Categories supported by the Goals module. Each entry is:
+# (name, lucide icon name, hex color)
+GOAL_CATEGORIES = [
+    ("Emergency Fund", "shield", "#059669"),
+    ("Travel", "plane", "#d97706"),
+    ("Home", "home", "#4f46e5"),
+    ("Education", "graduation-cap", "#7c3aed"),
+    ("Health", "heart-pulse", "#dc2626"),
+    ("Vehicle", "car", "#6b7280"),
+    ("Gadgets", "smartphone", "#db2777"),
+    ("Celebration", "party-popper", "#7c3aed"),
+    ("Investment", "trending-up", "#059669"),
+    ("Other", "target", "#6b7280"),
+]
+
+# Whitelist of allowed status keys for the Goals page.
+GOAL_STATUSES = ("on-track", "at-risk", "completed", "paused")
+
+# Whitelist of allowed sort keys for server-side goal sorting.
+# "progress" is computed as saved_amount / target_amount in SQL.
+GOAL_SORT_OPTIONS = {
+    "progress-desc": "(saved_amount * 1.0 / target_amount) DESC, id ASC",
+    "progress-asc": "(saved_amount * 1.0 / target_amount) ASC, id ASC",
+    "deadline-asc": "deadline ASC, id ASC",
+    "deadline-desc": "deadline DESC, id ASC",
+    "target-desc": "target_amount DESC, id ASC",
+    "target-asc": "target_amount ASC, id ASC",
+    "name-asc": "name COLLATE NOCASE ASC, id ASC",
+}
+
+# Map category name -> (icon, color) for the frontend.
+GOAL_CATEGORY_ICONS = {name: icon for name, icon, _ in GOAL_CATEGORIES}
+GOAL_CATEGORY_COLORS = {name: color for name, _, color in GOAL_CATEGORIES}
+GOAL_CATEGORY_NAMES = [name for name, _, _ in GOAL_CATEGORIES]
+
 
 def get_db():
     """Open and return a connection to the SQLite database.
@@ -192,6 +231,21 @@ def init_db():
             is_default INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now')),
             UNIQUE (user_id, category)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            name TEXT NOT NULL,
+            category TEXT NOT NULL,
+            target_amount REAL NOT NULL,
+            saved_amount REAL NOT NULL DEFAULT 0,
+            deadline TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'on-track',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
         )
     """)
 
@@ -1254,6 +1308,312 @@ def _format_activity_time(created_at):
     if dt.date() == now - timedelta(days=1):
         return f"Yesterday · {dt.strftime('%I:%M %p')}"
     return dt.strftime('%b %d · %I:%M %p')
+
+
+# ================================================================== #
+# Goals module — DB layer                                           #
+# ================================================================== #
+
+def _goal_status(saved, target, status):
+    """Return the effective status key for a goal.
+
+    If the goal is explicitly completed or paused, that status is kept.
+    Otherwise, a goal is "completed" when saved >= target, "at-risk" when
+    progress is below 40%, and "on-track" otherwise.
+    """
+    if status in ("completed", "paused"):
+        return status
+    if target > 0 and saved >= target:
+        return "completed"
+    pct = (saved / target * 100) if target > 0 else 0
+    if pct < 40:
+        return "at-risk"
+    return "on-track"
+
+
+def get_user_goals(user_id, status=None, category=None, sort="progress-desc"):
+    """Return all goals for a user with computed progress.
+
+    Each goal dict includes id, name, category, target_amount, saved_amount,
+    deadline, status, created_at, updated_at, progress (0-100), and
+    effective_status (the derived status). Supports optional status and
+    category filters and a whitelisted sort key. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    clauses = ["user_id = ?"]
+    params = [user_id]
+
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+
+    where = " AND ".join(clauses)
+    sort_sql = GOAL_SORT_OPTIONS.get(sort, GOAL_SORT_OPTIONS["progress-desc"])
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, name, category, target_amount, saved_amount, "
+        "deadline, status, created_at, updated_at "
+        f"FROM goals WHERE {where} "
+        f"ORDER BY {sort_sql}",
+        tuple(params),
+    )
+    rows = []
+    for row in cursor.fetchall():
+        g = dict(row)
+        g["progress"] = round((g["saved_amount"] / g["target_amount"] * 100), 1) if g["target_amount"] > 0 else 0.0
+        g["effective_status"] = _goal_status(g["saved_amount"], g["target_amount"], g["status"])
+        rows.append(g)
+    conn.close()
+
+    # Filter by effective status (computed) after fetching, since the raw
+    # status column may not match the derived status (e.g. saved == target).
+    if status:
+        rows = [g for g in rows if g["effective_status"] == status]
+
+    return rows
+
+
+def get_goal_by_id(goal_id, user_id):
+    """Return a single goal scoped to the user, or None if not found/owned.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, name, category, target_amount, saved_amount, "
+        "deadline, status, created_at, updated_at "
+        "FROM goals WHERE id = ? AND user_id = ?",
+        (goal_id, user_id),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        g = dict(row)
+        g["progress"] = round((g["saved_amount"] / g["target_amount"] * 100), 1) if g["target_amount"] > 0 else 0.0
+        g["effective_status"] = _goal_status(g["saved_amount"], g["target_amount"], g["status"])
+        return g
+    return None
+
+
+def create_goal(user_id, name, category, target_amount, saved_amount, deadline, status="on-track"):
+    """Create a new goal for a user and return its id.
+
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO goals (user_id, name, category, target_amount, saved_amount, deadline, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (user_id, name, category, float(target_amount), float(saved_amount), deadline, status),
+    )
+    goal_id = cursor.lastrowid
+    conn.commit()
+    conn.close()
+    return goal_id
+
+
+def update_goal(goal_id, user_id, name, category, target_amount, saved_amount, deadline, status):
+    """Update a goal row WHERE id = ? AND user_id = ?.
+
+    Returns True if a row was updated, False if no matching row found.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE goals SET name = ?, category = ?, target_amount = ?, "
+        "saved_amount = ?, deadline = ?, status = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (name, category, float(target_amount), float(saved_amount), deadline, status, goal_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def delete_goal(goal_id, user_id):
+    """Delete a goal row WHERE id = ? AND user_id = ?.
+
+    Returns True if a row was deleted, False if no matching row found.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM goals WHERE id = ? AND user_id = ?",
+        (goal_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def add_goal_funds(goal_id, user_id, amount):
+    """Add funds to a goal's saved_amount.
+
+    The saved amount is capped at the target. If the goal reaches its target,
+    its status is set to "completed". Returns the updated goal dict, or None
+    if the goal does not exist / is not owned by the user. Uses parameterized
+    queries — safe from SQL injection.
+    """
+    goal = get_goal_by_id(goal_id, user_id)
+    if goal is None:
+        return None
+
+    new_saved = min(goal["target_amount"], goal["saved_amount"] + float(amount))
+    new_status = "completed" if new_saved >= goal["target_amount"] else goal["status"]
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE goals SET saved_amount = ?, status = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (new_saved, new_status, goal_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+
+    return get_goal_by_id(goal_id, user_id)
+
+
+def get_goal_data(user_id, status=None, category=None, sort="progress-desc"):
+    """Compute the full Goals module data for a user.
+
+    Args:
+        user_id: the owning user.
+        status: optional status key filter.
+        category: optional category name filter.
+        sort: whitelisted sort key.
+
+    Returns a dict with:
+      - goals: list of goal dicts (with progress and effective_status)
+      - summary: {total_goals, on_track, completed, total_saved, remaining}
+      - insights: list of {icon, accent, tone, title, text}
+      - activity: list of {id, action, goal, text, time_label}
+      - categories: list of {name, icon, color}
+      - statuses: list of status keys
+      - filter_info: {status, category, sort}
+    """
+    goals = get_user_goals(user_id, status=status, category=category, sort=sort)
+
+    total_goals = len(goals)
+    on_track = sum(1 for g in goals if g["effective_status"] == "on-track")
+    completed = sum(1 for g in goals if g["effective_status"] == "completed")
+    total_saved = round(sum(g["saved_amount"] for g in goals), 2)
+    total_target = round(sum(g["target_amount"] for g in goals), 2)
+    remaining = round(max(0, total_target - total_saved), 2)
+
+    summary = {
+        "total_goals": total_goals,
+        "on_track": on_track,
+        "completed": completed,
+        "total_saved": total_saved,
+        "remaining": remaining,
+    }
+
+    insights = _compute_goal_insights(goals, summary)
+
+    # Activity timeline — derive from the goals table (recently updated first).
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, category, saved_amount, target_amount, status, updated_at "
+        "FROM goals WHERE user_id = ? "
+        "ORDER BY updated_at DESC, id DESC LIMIT 8",
+        (user_id,),
+    )
+    activity_rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    activity = []
+    for r in activity_rows:
+        action = "updated"
+        if r["status"] == "completed":
+            action = "completed"
+        elif r["saved_amount"] > 0 and r["saved_amount"] < r["target_amount"]:
+            action = "funded"
+        activity.append({
+            "id": r["id"],
+            "action": action,
+            "goal": r["name"],
+            "text": f"{r['name']} — {r['saved_amount']:,.0f} of {r['target_amount']:,.0f} saved",
+            "time_label": _format_activity_time(r["updated_at"]),
+        })
+
+    categories = [
+        {"name": name, "icon": icon, "color": color}
+        for name, icon, color in GOAL_CATEGORIES
+    ]
+
+    return {
+        "goals": goals,
+        "summary": summary,
+        "insights": insights,
+        "activity": activity,
+        "categories": categories,
+        "statuses": list(GOAL_STATUSES),
+        "filter_info": {
+            "status": status or "",
+            "category": category or "",
+            "sort": sort,
+        },
+    }
+
+
+def _compute_goal_insights(goals, summary):
+    """Generate data-driven insight cards for the Goals page.
+
+    Returns a list of dicts with keys: icon, accent, tone, title, text.
+    """
+    insights = []
+
+    at_risk = [g for g in goals if g["effective_status"] == "at-risk"]
+    completed = [g for g in goals if g["effective_status"] == "completed"]
+
+    if at_risk:
+        names = ", ".join(g["name"] for g in at_risk[:2])
+        insights.append({
+            "icon": "alert-triangle",
+            "accent": "var(--danger)",
+            "tone": "over",
+            "title": f"{len(at_risk)} goal{'s' if len(at_risk) > 1 else ''} at risk",
+            "text": f"{names} {('are' if len(at_risk) > 1 else 'is')} behind schedule. Consider increasing contributions.",
+        })
+    else:
+        insights.append({
+            "icon": "shield-check",
+            "accent": "var(--accent)",
+            "tone": "track",
+            "title": "No goals at risk",
+            "text": "All your goals are progressing well. Keep it up!",
+        })
+
+    if completed:
+        insights.append({
+            "icon": "trophy",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": f"{len(completed)} goal{'s' if len(completed) > 1 else ''} completed",
+            "text": "Great progress! You've reached your targets. Time to celebrate!",
+        })
+
+    if summary["total_goals"] > 0:
+        pct = round(summary["total_saved"] / (summary["total_saved"] + summary["remaining"]) * 100, 1) if (summary["total_saved"] + summary["remaining"]) > 0 else 0
+        insights.append({
+            "icon": "pie-chart",
+            "accent": "var(--accent-2)",
+            "tone": "warning",
+            "title": f"Overall progress {pct}%",
+            "text": f"You have saved ₹{summary['total_saved']:,.0f} across all goals.",
+        })
+
+    return insights
 
 
 # ================================================================== #

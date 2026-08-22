@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+
+{% block title %}Goals — Spendly{% endblock %}
+
+{% block page_title %}Goals{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Goals</span>
+{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/goals.css') }}">
+{% endblock %}
+
+{% block content %}
+
+<section class="goals-section">
+
+    <!-- ============ Page Header ============ -->
+    <div class="goals-header">
+        <div class="goals-header-copy">
+            <h1 class="goals-title">Goals</h1>
+            <p class="goals-subtitle">Set savings targets, track your progress, and celebrate every milestone.</p>
+        </div>
+        <div class="goals-header-actions">
+            <button type="button" class="btn-goal" data-goal-create>
+                <i data-lucide="plus" width="18" height="18"></i>
+                Create Goal
+            </button>
+            <a href="{{ url_for('goals_export') }}" class="btn-export" title="Download goals as CSV">
+                <i data-lucide="download" width="18" height="18"></i>
+                Export
+            </a>
+        </div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+        <div class="auth-{{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <!-- ============ Filter Bar ============ -->
+    <form class="goals-filter-bar" id="goalFilterForm" method="GET" action="{{ url_for('goals') }}">
+        <div class="goals-filter-grid">
+            <label class="gl-filter-field">
+                <span class="gl-filter-label">Status</span>
+                <select name="status" id="goalStatus" class="filter-select">
+                    <option value="">All statuses</option>
+                    {% for status in goal_statuses %}
+                    <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>
+                        {% if status == 'on-track' %}On Track{% elif status == 'at-risk' %}At Risk{% elif status == 'completed' %}Completed{% else %}Paused{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="gl-filter-field">
+                <span class="gl-filter-label">Category</span>
+                <select name="category" id="goalCategory" class="filter-select">
+                    <option value="">All categories</option>
+                    {% for cat in goal_categories %}
+                    <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label class="gl-filter-field">
+                <span class="gl-filter-label">Sort By</span>
+                <select name="sort" id="goalSort" class="filter-select">
+                    <option value="progress-desc" {% if filters.sort == 'progress-desc' %}selected{% endif %}>Progress (High → Low)</option>
+                    <option value="progress-asc" {% if filters.sort == 'progress-asc' %}selected{% endif %}>Progress (Low → High)</option>
+                    <option value="deadline-asc" {% if filters.sort == 'deadline-asc' %}selected{% endif %}>Deadline (Soonest)</option>
+                    <option value="deadline-desc" {% if filters.sort == 'deadline-desc' %}selected{% endif %}>Deadline (Latest)</option>
+                    <option value="target-desc" {% if filters.sort == 'target-desc' %}selected{% endif %}>Target (High → Low)</option>
+                    <option value="target-asc" {% if filters.sort == 'target-asc' %}selected{% endif %}>Target (Low → High)</option>
+                    <option value="name-asc" {% if filters.sort == 'name-asc' %}selected{% endif %}>Name (A → Z)</option>
+                </select>
+            </label>
+        </div>
+        <div class="goals-filter-footer">
+            <span class="filter-result-count" id="goalResultCount">
+                {% if filters.status or filters.category %}
+                    Showing {{ goal.goals|length }} goal{{ 's' if goal.goals|length != 1 else '' }}
+                {% else %}
+                    Showing all goals
+                {% endif %}
+            </span>
+            <div class="goals-filter-actions">
+                <a href="{{ url_for('goals') }}" class="filter-reset-btn" id="goalFilterReset">
+                    <i data-lucide="rotate-ccw" width="14" height="14"></i>
+                    Reset
+                </a>
+                <button type="submit" class="filter-apply-btn" id="goalFilterApply">
+                    <i data-lucide="filter" width="14" height="14"></i>
+                    Apply
+                </button>
+            </div>
+        </div>
+    </form>
+
+    <!-- ============ Summary Cards (5) ============ -->
+    {% set s = goal.summary %}
+    <div class="goals-stats" id="goalSummaryGrid">
+        <div class="stat-card gl-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="target" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Total</span>
+            </div>
+            <div class="stat-label">Total Goals</div>
+            <div class="stat-value stat-value-sm" data-stat="totalGoals">{{ s.total_goals }}</div>
+            <div class="stat-delta" data-stat="totalGoalsDelta">across {{ goal_categories|length }} categories</div>
+        </div>
+        <div class="stat-card gl-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="trending-up" class="stat-icon"></i></div>
+                <span class="stat-change positive">Track</span>
+            </div>
+            <div class="stat-label">On Track</div>
+            <div class="stat-value stat-value-sm" data-stat="onTrack">{{ s.on_track }}</div>
+            <div class="stat-delta" data-stat="onTrackDelta">goals progressing well</div>
+        </div>
+        <div class="stat-card gl-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="check-circle" class="stat-icon"></i></div>
+                <span class="stat-change success">Done</span>
+            </div>
+            <div class="stat-label">Completed</div>
+            <div class="stat-value stat-value-sm" data-stat="completed">{{ s.completed }}</div>
+            <div class="stat-delta" data-stat="completedDelta">milestones reached</div>
+        </div>
+        <div class="stat-card gl-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="piggy-bank" class="stat-icon"></i></div>
+                <span class="stat-change positive">Saved</span>
+            </div>
+            <div class="stat-label">Total Saved</div>
+            <div class="stat-value stat-value-sm" data-stat="totalSaved">₹{{ "%.0f"|format(s.total_saved) }}</div>
+            <div class="stat-delta" data-stat="totalSavedDelta">across all goals</div>
+        </div>
+        <div class="stat-card gl-stat-card">
+            <div class="stat-card-top">
+                <div class="stat-icon-wrap"><i data-lucide="wallet" class="stat-icon"></i></div>
+                <span class="stat-change neutral">Left</span>
+            </div>
+            <div class="stat-label">Remaining</div>
+            <div class="stat-value stat-value-sm" data-stat="remaining">₹{{ "%.0f"|format(s.remaining) }}</div>
+            <div class="stat-delta" data-stat="remainingDelta">to reach all targets</div>
+        </div>
+    </div>
+
+    <!-- ============ Two-Column Layout ============ -->
+    <div class="goals-layout">
+
+        <!-- ============ Main Column ============ -->
+        <div class="goals-main-col">
+
+            <!-- ============ Goal Cards ============ -->
+            <div class="goal-cards-section">
+                <div class="goal-section-head">
+                    <div class="goal-section-title">
+                        <i data-lucide="flag" class="goal-section-icon"></i>
+                        <h2 class="goal-section-heading">Your Goals</h2>
+                    </div>
+                    <span class="activity-chip" id="goalCountChip">{{ goal.goals|length }} goal{{ 's' if goal.goals|length != 1 else '' }}</span>
+                </div>
+
+                {% if goal.goals %}
+                <div class="goal-progress-grid" id="goalProgressGrid">
+                    {% for g in goal.goals %}
+                    {% set meta = goal_icons.get(g.category, 'target') %}
+                    {% set color = goal_colors.get(g.category, '#6b7280') %}
+                    {% set status = g.effective_status %}
+                    <div class="goal-progress-card" data-goal-id="{{ g.id }}" style="--gl-accent: {{ color }}">
+                        <div class="goal-progress-top">
+                            <div class="goal-progress-cat">
+                                <span class="goal-progress-swatch"><i data-lucide="{{ meta }}"></i></span>
+                                <div class="goal-progress-copy">
+                                    <div class="goal-progress-name">{{ g.name }}</div>
+                                    <div class="goal-progress-category">{{ g.category }}</div>
+                                </div>
+                            </div>
+                            <div class="goal-progress-pct{% if status == 'at-risk' %} is-at-risk{% elif status == 'completed' %} is-completed{% endif %}">
+                                {{ "%.0f"|format(g.progress) }}%
+                            </div>
+                        </div>
+                        <div class="goal-progress-track">
+                            <div class="goal-progress-fill{% if status == 'at-risk' %} is-at-risk{% elif status == 'completed' %} is-completed{% endif %}" data-fill data-pct="{{ [g.progress, 100]|min }}"></div>
+                        </div>
+                        <div class="goal-progress-meta">
+                            <span class="goal-progress-saved"><strong>₹{{ "%.0f"|format(g.saved_amount) }}</strong> saved</span>
+                            <span class="goal-progress-target">of ₹{{ "%.0f"|format(g.target_amount) }}</span>
+                        </div>
+                        <div class="goal-progress-footer">
+                            <span class="goal-deadline">
+                                <i data-lucide="calendar"></i>
+                                {{ g.deadline }}
+                            </span>
+                            <span class="goal-status {{ status }}">
+                                <i data-lucide="{% if status == 'on-track' %}check-circle{% elif status == 'at-risk' %}alert-circle{% elif status == 'completed' %}check-circle-2{% else %}pause-circle{% endif %}"></i>
+                                {% if status == 'on-track' %}On Track{% elif status == 'at-risk' %}At Risk{% elif status == 'completed' %}Completed{% else %}Paused{% endif %}
+                            </span>
+                        </div>
+                        <div class="goal-card-actions">
+                            <button type="button" class="txn-icon-btn" data-goal-fund="{{ g.id }}" title="Add funds" aria-label="Add funds to {{ g.name }}">
+                                <i data-lucide="coins"></i>
+                            </button>
+                            <button type="button" class="txn-icon-btn" data-goal-edit="{{ g.id }}" title="Edit goal" aria-label="Edit {{ g.name }}">
+                                <i data-lucide="pencil"></i>
+                            </button>
+                            <button type="button" class="txn-icon-btn txn-icon-btn-danger" data-goal-delete="{{ g.id }}" title="Delete goal" aria-label="Delete {{ g.name }}">
+                                <i data-lucide="trash-2"></i>
+                            </button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="goal-empty" id="goalEmpty">
+                    <div class="goal-empty-icon"><i data-lucide="flag" width="48" height="48"></i></div>
+                    <h2 class="goal-empty-title">No goals match your filters</h2>
+                    <p class="goal-empty-text">Try adjusting or clearing your filters to see all goals.</p>
+                    <a href="{{ url_for('goals') }}" class="btn-ghost">Reset filters</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- ============ Side Column ============ -->
+        <aside class="goals-side-col">
+
+            <!-- ============ Insights ============ -->
+            <div class="dashboard-card goal-insights-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="lightbulb" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Insights</h2>
+                    </div>
+                    <span class="activity-chip">Smart</span>
+                </div>
+                <div class="dashboard-card-body">
+                    <div class="goal-insights-list" id="goalInsightsList">
+                        {% for insight in goal.insights %}
+                        <div class="goal-insight-card is-{{ insight.tone }}" style="--insight-accent: {{ insight.accent }}">
+                            <div class="goal-insight-icon"><i data-lucide="{{ insight.icon }}"></i></div>
+                            <div class="goal-insight-body">
+                                <h3 class="goal-insight-title">{{ insight.title }}</h3>
+                                <p class="goal-insight-text">{{ insight.text }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============ Quick Actions ============ -->
+            <div class="dashboard-card goal-quick-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="zap" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Quick Actions</h2>
+                    </div>
+                    <span class="activity-chip">Shortcuts</span>
+                </div>
+                <div class="dashboard-card-body">
+                    <div class="goal-quick-list">
+                        <button type="button" class="quick-action-card" data-quick-action data-goal-create>
+                            <div class="quick-action-icon" style="--qa-accent: var(--accent)">
+                                <i data-lucide="plus"></i>
+                            </div>
+                            <div class="quick-action-body">
+                                <h4 class="quick-action-name">Create Goal</h4>
+                                <p class="quick-action-desc">Set a new savings target.</p>
+                            </div>
+                        </button>
+                        <button type="button" class="quick-action-card" data-quick-action data-goal-add-funds>
+                            <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
+                                <i data-lucide="coins"></i>
+                            </div>
+                            <div class="quick-action-body">
+                                <h4 class="quick-action-name">Add Funds</h4>
+                                <p class="quick-action-desc">Contribute to a goal quickly.</p>
+                            </div>
+                        </button>
+                        <button type="button" class="quick-action-card" data-quick-action data-goal-edit-first>
+                            <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
+                                <i data-lucide="pencil"></i>
+                            </div>
+                            <div class="quick-action-body">
+                                <h4 class="quick-action-name">Adjust Target</h4>
+                                <p class="quick-action-desc">Tune a goal to match your plans.</p>
+                            </div>
+                        </button>
+                        <a href="{{ url_for('goals_export') }}" class="quick-action-card">
+                            <div class="quick-action-icon" style="--qa-accent: var(--bar-health)">
+                                <i data-lucide="download"></i>
+                            </div>
+                            <div class="quick-action-body">
+                                <h4 class="quick-action-name">Export Report</h4>
+                                <p class="quick-action-desc">Download your goal summary as CSV.</p>
+                            </div>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ============ Recent Goal Activity Timeline ============ -->
+            <div class="dashboard-card goal-activity-card">
+                <div class="dashboard-card-header">
+                    <div class="dashboard-card-heading">
+                        <i data-lucide="history" class="dashboard-card-icon"></i>
+                        <h2 class="dashboard-card-title">Recent Activity</h2>
+                    </div>
+                    <span class="activity-chip">Timeline</span>
+                </div>
+                <div class="dashboard-card-body">
+                    {% if goal.activity %}
+                    <ol class="goal-timeline" id="goalTimeline">
+                        {% for act in goal.activity %}
+                        {% set is_over = act.action == 'deleted' %}
+                        {% set is_warning = act.action == 'updated' %}
+                        {% set is_success = act.action in ('completed', 'funded') %}
+                        <li class="goal-timeline-item{% if is_over %} is-over{% elif is_warning %} is-warning{% elif is_success %} is-success{% endif %}">
+                            <span class="goal-timeline-icon {% if act.action == 'completed' %}added{% elif act.action == 'funded' %}funded{% elif act.action == 'updated' %}edited{% else %}alert{% endif %}">
+                                <i data-lucide="{% if act.action == 'completed' %}trophy{% elif act.action == 'funded' %}coins{% elif act.action == 'updated' %}pencil{% else %}alert-circle{% endif %}"></i>
+                            </span>
+                            <div class="goal-timeline-body">
+                                <p class="goal-timeline-text"><strong>{{ act.goal }}</strong> — {{ act.text }}</p>
+                                <div class="goal-timeline-meta">{{ act.time_label }}</div>
+                            </div>
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="goal-timeline-empty">No goal activity yet. Create a goal to see it here.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ============ Create / Edit Goal Modal ============ -->
+    <div class="txn-modal goal-modal" data-goal-modal hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title" data-goal-modal-title>Create Goal</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body">
+                <form method="POST" action="{{ url_for('add_goal') }}" id="goalForm">
+                    <div class="gl-form-grid">
+                        <label class="gl-filter-field gl-field-full">
+                            <span class="gl-filter-label">Goal Name</span>
+                            <input type="text" name="name" id="goalFormName" class="filter-input" placeholder="e.g. Goa Trip 2026" required>
+                        </label>
+                        <label class="gl-filter-field">
+                            <span class="gl-filter-label">Category</span>
+                            <select name="category" id="goalFormCategory" class="filter-select" required>
+                                {% for cat in goal_categories %}
+                                <option value="{{ cat }}">{{ cat }}</option>
+                                {% endfor %}
+                            </select>
+                        </label>
+                        <label class="gl-filter-field">
+                            <span class="gl-filter-label">Target Amount (₹)</span>
+                            <input type="number" name="target_amount" id="goalFormTarget" class="filter-input" placeholder="50000" min="1" step="100" required>
+                        </label>
+                        <label class="gl-filter-field">
+                            <span class="gl-filter-label">Saved So Far (₹)</span>
+                            <input type="number" name="saved_amount" id="goalFormSaved" class="filter-input" placeholder="0" min="0" step="100">
+                        </label>
+                        <label class="gl-filter-field">
+                            <span class="gl-filter-label">Deadline</span>
+                            <input type="date" name="deadline" id="goalFormDeadline" class="filter-input" required>
+                        </label>
+                        <label class="gl-filter-field">
+                            <span class="gl-filter-label">Status</span>
+                            <select name="status" id="goalFormStatus" class="filter-select">
+                                <option value="on-track">On Track</option>
+                                <option value="at-risk">At Risk</option>
+                                <option value="paused">Paused</option>
+                                <option value="completed">Completed</option>
+                            </select>
+                        </label>
+                    </div>
+                    <div class="gl-modal-actions">
+                        <button type="button" class="btn-export" data-modal-close>Cancel</button>
+                        <button type="submit" class="btn-goal" data-goal-submit>Create Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Add Funds Modal ============ -->
+    <div class="txn-modal goal-modal" data-goal-funds-modal hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title">Add Funds</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body">
+                <p class="goal-funds-text" data-goal-funds-text>Add funds to your goal.</p>
+                <form method="POST" action="" id="goalFundsForm">
+                    <label class="gl-filter-field">
+                        <span class="gl-filter-label">Amount (₹)</span>
+                        <input type="number" name="amount" id="goalFundsAmount" class="filter-input" placeholder="1000" min="1" step="100" required>
+                    </label>
+                    <div class="gl-modal-actions">
+                        <button type="button" class="btn-export" data-modal-close>Cancel</button>
+                        <button type="submit" class="btn-goal">Add Funds</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Delete Goal Modal ============ -->
+    <div class="txn-modal goal-modal" data-goal-delete-modal hidden>
+        <div class="txn-modal-backdrop" data-modal-close></div>
+        <div class="txn-modal-panel">
+            <div class="txn-modal-head">
+                <h3 class="txn-modal-title">Delete Goal</h3>
+                <button type="button" class="txn-modal-close" data-modal-close aria-label="Close">
+                    <i data-lucide="x"></i>
+                </button>
+            </div>
+            <div class="txn-modal-body">
+                <p class="goal-delete-text" data-goal-delete-text>Are you sure you want to delete this goal?</p>
+                <form method="POST" action="" id="goalDeleteForm">
+                    <div class="gl-modal-actions">
+                        <button type="button" class="btn-export" data-modal-close>Cancel</button>
+                        <button type="submit" class="btn-goal btn-goal-danger">Delete Goal</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============ Toast ============ -->
+    <div class="report-toast" data-goal-toast hidden>
+        <i data-lucide="check-circle" class="report-toast-icon"></i>
+        <span class="report-toast-text" data-goal-toast-text>Goal saved successfully</span>
+    </div>
+
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Pass the server-computed goal data and URL builders to the frontend.
+    window.SPENDLY_GOALS = {
+        goal: {{ goal | tojson }},
+        urls: {
+            add: {{ url_for('add_goal') | tojson }},
+            edit: {{ url_for('edit_goal', goal_id=0) | tojson }},
+            delete: {{ url_for('delete_goal_view', goal_id=0) | tojson }},
+            funds: {{ url_for('add_goal_funds_view', goal_id=0) | tojson }},
+            export: {{ url_for('goals_export') | tojson }}
+        }
+    };
+</script>
+<script src="{{ url_for('static', filename='js/goals.js') }}"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}
