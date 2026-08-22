@@ -97,10 +97,9 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                        <a href="{{ url_for('goals') }}" class="sidebar-link {% if request.endpoint in ['goals', 'add_goal', 'edit_goal', 'delete_goal_view', 'add_goal_funds_view', 'goals_export'] %}active{% endif %}">
                             <i data-lucide="target" class="sidebar-link-icon"></i>
                             <span class="sidebar-link-text">Goals</span>
-                            <span class="sidebar-badge">Soon</span>
                         </a>
                     </li>
                     <li>

@@ -52,6 +52,8 @@ def app():
         conn.execute("DELETE FROM activities")
         conn.execute("DELETE FROM expenses")
         conn.execute("DELETE FROM categories")
+        conn.execute("DELETE FROM goals")
+        conn.execute("DELETE FROM budgets")
         conn.execute("DELETE FROM users")
         # Reset AUTOINCREMENT counters so the fresh seed assigns id=1 to the
         # demo user, keeping the `user_id == 1` convention used by the tests.

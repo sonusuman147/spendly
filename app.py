@@ -52,6 +52,19 @@ update_category as db_update_category,
     BUDGET_LIMITS,
     BUDGET_CATEGORY_ICONS,
     BUDGET_CATEGORY_COLORS,
+# Goals module
+    get_goal_data as db_get_goal_data,
+    get_user_goals as db_get_user_goals,
+    get_goal_by_id as db_get_goal_by_id,
+    create_goal as db_create_goal,
+    update_goal as db_update_goal,
+    delete_goal as db_delete_goal,
+    add_goal_funds as db_add_goal_funds,
+    GOAL_STATUSES,
+    GOAL_CATEGORY_NAMES,
+    GOAL_CATEGORY_ICONS,
+    GOAL_CATEGORY_COLORS,
+    GOAL_SORT_OPTIONS,
 )
 
 # Python standard library
@@ -1830,6 +1843,299 @@ def budgets_export():
         output.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=spendly-budgets.csv"},
+    )
+
+
+# ------------------------------------------------------------------ #
+# Goals routes                                                        #
+# ------------------------------------------------------------------ #
+
+def _parse_goal_filters():
+    """Parse and validate the GET filter parameters for the Goals page.
+
+    Returns a dict with:
+      - status: str (must be in GOAL_STATUSES, else "")
+      - category: str (must be a known goal category, else "")
+      - sort: str (must be in GOAL_SORT_OPTIONS, else "progress-desc")
+    """
+    status = request.args.get("status", "").strip()
+    if status not in GOAL_STATUSES:
+        status = ""
+
+    category = request.args.get("category", "").strip()
+    if category and category not in GOAL_CATEGORY_NAMES:
+        category = ""
+
+    sort = request.args.get("sort", "progress-desc").strip()
+    if sort not in GOAL_SORT_OPTIONS:
+        sort = "progress-desc"
+
+    return {"status": status, "category": category, "sort": sort}
+
+
+def _goal_query_args(filters):
+    """Build a dict of query params to preserve goal filter state."""
+    args = {}
+    if filters["status"]:
+        args["status"] = filters["status"]
+    if filters["category"]:
+        args["category"] = filters["category"]
+    if filters["sort"] != "progress-desc":
+        args["sort"] = filters["sort"]
+    return args
+
+
+def _validate_goal_form():
+    """Validate the goal create/edit form fields.
+
+    Returns (data_dict, error_message). data_dict is None on error.
+    """
+    name = request.form.get("name", "").strip()
+    category = request.form.get("category", "").strip()
+    target_raw = request.form.get("target_amount", "").strip()
+    saved_raw = request.form.get("saved_amount", "").strip()
+    deadline = request.form.get("deadline", "").strip()
+    status = request.form.get("status", "on-track").strip()
+
+    if not name:
+        return None, "Goal name is required."
+    if len(name) > 100:
+        return None, "Goal name must be 100 characters or less."
+    if category not in GOAL_CATEGORY_NAMES:
+        return None, "Please select a valid category."
+    if status not in GOAL_STATUSES:
+        status = "on-track"
+
+    try:
+        target = float(target_raw)
+        if target <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return None, "Target amount must be a positive number."
+
+    try:
+        saved = float(saved_raw) if saved_raw else 0.0
+        if saved < 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        return None, "Saved amount must be a non-negative number."
+
+    if saved > target:
+        return None, "Saved amount cannot exceed the target amount."
+
+    if not deadline:
+        return None, "Deadline is required."
+    try:
+        dt_datetime.strptime(deadline, "%Y-%m-%d")
+    except ValueError:
+        return None, "Deadline must be a valid date (YYYY-MM-DD)."
+
+    return {
+        "name": name,
+        "category": category,
+        "target_amount": target,
+        "saved_amount": saved,
+        "deadline": deadline,
+        "status": status,
+    }, None
+
+
+@app.route("/goals")
+def goals():
+    """Render the Goals dashboard with database-backed data.
+
+    Supports optional status, category, and sort filters via GET query
+    parameters. Returns goal cards, summary stats, insights, quick actions,
+    and recent activity — all computed from the user's real goal rows.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    filters = _parse_goal_filters()
+
+    goal_data = db_get_goal_data(
+        user_id,
+        status=filters["status"] or None,
+        category=filters["category"] or None,
+        sort=filters["sort"],
+    )
+
+    return render_template(
+        "goals.html",
+        goal=goal_data,
+        goal_categories=GOAL_CATEGORY_NAMES,
+        goal_statuses=list(GOAL_STATUSES),
+        goal_icons=GOAL_CATEGORY_ICONS,
+        goal_colors=GOAL_CATEGORY_COLORS,
+        goal_sort_options=list(GOAL_SORT_OPTIONS.keys()),
+        filters=filters,
+        query_args=_goal_query_args(filters),
+    )
+
+
+@app.route("/goals/add", methods=["POST"])
+def add_goal():
+    """Create a new goal for the logged-in user.
+
+    Validates all form fields, creates the goal row, and redirects back to
+    /goals preserving the active filter state.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    data, error = _validate_goal_form()
+    if error:
+        flash(error, "error")
+        return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+    try:
+        db_create_goal(
+            session["user_id"],
+            data["name"],
+            data["category"],
+            data["target_amount"],
+            data["saved_amount"],
+            data["deadline"],
+            data["status"],
+        )
+    except sqlite3.IntegrityError:
+        flash("Could not save the goal — please try again.", "error")
+        return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+    flash(f"Goal '{data['name']}' created successfully!", "success")
+    return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+
+@app.route("/goals/<int:goal_id>/edit", methods=["POST"])
+def edit_goal(goal_id):
+    """Update an existing goal (ownership enforced).
+
+    Validates all form fields. Returns 404 if the goal does not exist,
+    403 if it belongs to another user.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    goal = db_get_goal_by_id(goal_id, session["user_id"])
+    if goal is None:
+        abort(404)
+
+    data, error = _validate_goal_form()
+    if error:
+        flash(error, "error")
+        return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+    updated = db_update_goal(
+        goal_id,
+        session["user_id"],
+        data["name"],
+        data["category"],
+        data["target_amount"],
+        data["saved_amount"],
+        data["deadline"],
+        data["status"],
+    )
+    if not updated:
+        abort(403)
+
+    flash(f"Goal '{data['name']}' updated successfully!", "success")
+    return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+
+@app.route("/goals/<int:goal_id>/delete", methods=["POST"])
+def delete_goal_view(goal_id):
+    """Delete a goal (ownership enforced).
+
+    Returns 404 if the goal does not exist, 403 if it belongs to another user.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    goal = db_get_goal_by_id(goal_id, session["user_id"])
+    if goal is None:
+        abort(404)
+
+    deleted = db_delete_goal(goal_id, session["user_id"])
+    if not deleted:
+        abort(403)
+
+    flash(f"Goal '{goal['name']}' deleted.", "success")
+    return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+
+@app.route("/goals/<int:goal_id>/funds", methods=["POST"])
+def add_goal_funds_view(goal_id):
+    """Add funds to a goal (ownership enforced).
+
+    Validates the amount as a positive number. The saved amount is capped at
+    the target; reaching the target marks the goal as completed. Returns 404
+    if the goal does not exist, 403 if it belongs to another user.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    goal = db_get_goal_by_id(goal_id, session["user_id"])
+    if goal is None:
+        abort(404)
+
+    amount_raw = request.form.get("amount", "").strip()
+    try:
+        amount = float(amount_raw)
+        if amount <= 0:
+            raise ValueError
+    except (ValueError, TypeError):
+        flash("Amount must be a positive number.", "error")
+        return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+    updated = db_add_goal_funds(goal_id, session["user_id"], amount)
+    if updated is None:
+        abort(403)
+
+    flash(f"Added ₹{amount:,.2f} to '{updated['name']}'.", "success")
+    return redirect(url_for("goals", **_goal_query_args(_parse_goal_filters())))
+
+
+@app.route("/goals/export")
+def goals_export():
+    """Export the user's goals as a CSV file.
+
+    Exports name, category, target, saved, progress %, deadline, and status
+    for every goal owned by the user. Returns a text/csv attachment.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    goals_list = db_get_user_goals(user_id)
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Name", "Category", "Target", "Saved", "Progress %", "Deadline", "Status",
+    ])
+    for g in goals_list:
+        writer.writerow([
+            g["name"],
+            g["category"],
+            f"{g['target_amount']:.2f}",
+            f"{g['saved_amount']:.2f}",
+            f"{g['progress']:.1f}",
+            g["deadline"],
+            g["effective_status"],
+        ])
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spendly-goals.csv"},
     )
 
 
