@@ -249,6 +249,34 @@ def init_db():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            currency TEXT NOT NULL DEFAULT 'INR',
+            date_format TEXT NOT NULL DEFAULT 'DD-MM-YYYY',
+            language TEXT NOT NULL DEFAULT 'en',
+            week_start TEXT NOT NULL DEFAULT 'monday',
+            budget_alert_threshold INTEGER NOT NULL DEFAULT 80,
+            default_payment_method TEXT NOT NULL DEFAULT 'upi',
+            theme TEXT NOT NULL DEFAULT 'dark',
+            accent_color TEXT NOT NULL DEFAULT 'green',
+            interface_density TEXT NOT NULL DEFAULT 'comfortable',
+            two_factor_enabled INTEGER NOT NULL DEFAULT 0,
+            login_alerts_enabled INTEGER NOT NULL DEFAULT 1,
+            expense_reminders_enabled INTEGER NOT NULL DEFAULT 1,
+            budget_alerts_enabled INTEGER NOT NULL DEFAULT 1,
+            goal_milestones_enabled INTEGER NOT NULL DEFAULT 1,
+            weekly_summary_enabled INTEGER NOT NULL DEFAULT 1,
+            product_updates_enabled INTEGER NOT NULL DEFAULT 0,
+            personalised_insights_enabled INTEGER NOT NULL DEFAULT 1,
+            anonymous_usage_enabled INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now')),
+            UNIQUE (user_id)
+        )
+    """)
+
     # Add google_id column if not already present — safe on repeated runs
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
@@ -2592,6 +2620,223 @@ def _compute_insights(total_spending, prev_total_spending,
         })
 
     return insights
+
+
+# ================================================================== #
+# Settings module — DB layer                                        #
+# ================================================================== #
+
+# Whitelist of allowed values for settings fields.
+SETTINGS_CURRENCIES = ["INR", "USD", "EUR", "GBP", "JPY", "AUD"]
+SETTINGS_DATE_FORMATS = ["DD-MM-YYYY", "MM-DD-YYYY", "YYYY-MM-DD"]
+SETTINGS_LANGUAGES = ["en", "hi", "bn", "ta", "te"]
+SETTINGS_WEEK_STARTS = ["monday", "sunday", "saturday"]
+SETTINGS_PAYMENT_METHODS = ["upi", "card", "cash", "bank", "wallet"]
+SETTINGS_THEMES = ["light", "dark", "system"]
+SETTINGS_ACCENT_COLORS = ["green", "blue", "purple", "amber", "rose"]
+SETTINGS_DENSITIES = ["comfortable", "compact"]
+
+# Default settings values (must match the user_settings table defaults).
+DEFAULT_USER_SETTINGS = {
+    "currency": "INR",
+    "date_format": "DD-MM-YYYY",
+    "language": "en",
+    "week_start": "monday",
+    "budget_alert_threshold": 80,
+    "default_payment_method": "upi",
+    "theme": "dark",
+    "accent_color": "green",
+    "interface_density": "comfortable",
+    "two_factor_enabled": 0,
+    "login_alerts_enabled": 1,
+    "expense_reminders_enabled": 1,
+    "budget_alerts_enabled": 1,
+    "goal_milestones_enabled": 1,
+    "weekly_summary_enabled": 1,
+    "product_updates_enabled": 0,
+    "personalised_insights_enabled": 1,
+    "anonymous_usage_enabled": 0,
+}
+
+
+def get_user_settings(user_id):
+    """Return the settings row for a user, creating defaults if none exist.
+
+    If the user has no settings row yet, one is created with the default
+    values from DEFAULT_USER_SETTINGS. Returns a dict of settings fields.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT * FROM user_settings WHERE user_id = ?",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+
+    if row is None:
+        # Create default settings row for this user.
+        cursor.execute(
+            "INSERT INTO user_settings (user_id) VALUES (?)",
+            (user_id,),
+        )
+        conn.commit()
+        cursor.execute(
+            "SELECT * FROM user_settings WHERE user_id = ?",
+            (user_id,),
+        )
+        row = cursor.fetchone()
+
+    conn.close()
+    return dict(row) if row else dict(DEFAULT_USER_SETTINGS)
+
+
+def update_user_settings(user_id, **kwargs):
+    """Update settings fields for a user.
+
+    Only whitelisted keys are accepted; unknown keys are ignored. Values are
+    validated against the allowed sets where applicable. Returns True if any
+    field was updated. Uses parameterized queries — safe from SQL injection.
+    """
+    # Build the list of allowed columns and their validated values.
+    allowed = {
+        "currency": SETTINGS_CURRENCIES,
+        "date_format": SETTINGS_DATE_FORMATS,
+        "language": SETTINGS_LANGUAGES,
+        "week_start": SETTINGS_WEEK_STARTS,
+        "default_payment_method": SETTINGS_PAYMENT_METHODS,
+        "theme": SETTINGS_THEMES,
+        "accent_color": SETTINGS_ACCENT_COLORS,
+        "interface_density": SETTINGS_DENSITIES,
+    }
+
+    # Integer toggle fields (0/1).
+    toggle_fields = [
+        "two_factor_enabled",
+        "login_alerts_enabled",
+        "expense_reminders_enabled",
+        "budget_alerts_enabled",
+        "goal_milestones_enabled",
+        "weekly_summary_enabled",
+        "product_updates_enabled",
+        "personalised_insights_enabled",
+        "anonymous_usage_enabled",
+    ]
+
+    # Integer range field.
+    int_fields = ["budget_alert_threshold"]
+
+    columns = []
+    params = []
+
+    for key, value in kwargs.items():
+        if key in allowed:
+            if value not in allowed[key]:
+                continue  # Invalid value — skip
+            columns.append(f"{key} = ?")
+            params.append(value)
+        elif key in toggle_fields:
+            # Accept boolean-like values (True/False, 1/0, "1"/"0", "true"/"false").
+            if isinstance(value, bool):
+                val = 1 if value else 0
+            elif isinstance(value, int) and value in (0, 1):
+                val = value
+            elif isinstance(value, str) and value.lower() in ("1", "true", "yes", "on"):
+                val = 1
+            elif isinstance(value, str) and value.lower() in ("0", "false", "no", "off"):
+                val = 0
+            else:
+                continue
+            columns.append(f"{key} = ?")
+            params.append(val)
+        elif key in int_fields:
+            try:
+                val = int(value)
+                if val < 1 or val > 100:
+                    continue
+            except (TypeError, ValueError):
+                continue
+            columns.append(f"{key} = ?")
+            params.append(val)
+
+    if not columns:
+        return False
+
+    columns.append("updated_at = datetime('now')")
+    params.append(user_id)
+
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE user_settings SET " + ", ".join(columns) + " WHERE user_id = ?",
+        tuple(params),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def reset_user_settings(user_id):
+    """Reset a user's settings to the default values.
+
+    Deletes the user's settings row so the next get_user_settings() call
+    recreates it with defaults. Returns True if a row was deleted.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM user_settings WHERE user_id = ?",
+        (user_id,),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def clear_user_data(user_id):
+    """
+    Delete all financial data for a user (expenses, activities, budgets,
+    goals, categories). The user row itself is left untouched.
+    Returns a dict with counts of deleted rows per table.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    counts = {}
+    for table in ("expenses", "activities", "budgets", "goals", "categories"):
+        cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+        counts[table] = cursor.rowcount
+
+    conn.commit()
+    conn.close()
+    return counts
+
+
+def delete_user_account(user_id):
+    """
+    Permanently delete a user and all associated data.
+
+    Deletes the user's settings, expenses, activities, budgets, goals, and
+    categories, then the user row itself. Returns True on success.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Delete child rows first (foreign key order).
+    for table in ("user_settings", "expenses", "activities", "budgets", "goals", "categories"):
+        cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
+
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
 
 
 def add_activity(user_id, action, expense_id=None, category=None,
