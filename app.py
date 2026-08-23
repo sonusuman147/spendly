@@ -65,6 +65,21 @@ update_category as db_update_category,
     GOAL_CATEGORY_ICONS,
     GOAL_CATEGORY_COLORS,
     GOAL_SORT_OPTIONS,
+# Settings module
+    get_user_settings as db_get_user_settings,
+    update_user_settings as db_update_user_settings,
+    reset_user_settings as db_reset_user_settings,
+    clear_user_data as db_clear_user_data,
+    delete_user_account as db_delete_user_account,
+    SETTINGS_CURRENCIES,
+    SETTINGS_DATE_FORMATS,
+    SETTINGS_LANGUAGES,
+    SETTINGS_WEEK_STARTS,
+    SETTINGS_PAYMENT_METHODS,
+    SETTINGS_THEMES,
+    SETTINGS_ACCENT_COLORS,
+    SETTINGS_DENSITIES,
+    DEFAULT_USER_SETTINGS,
 )
 
 # Python standard library
@@ -2137,6 +2152,280 @@ def goals_export():
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=spendly-goals.csv"},
     )
+
+
+@app.route("/settings")
+def settings():
+    """Render the Settings page with the user's real data.
+
+    Requires authentication — redirects to /login if session is missing.
+    Loads the user's profile and persisted settings from the database.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user = get_user_by_id(session["user_id"])
+    if user is None:
+        session.clear()
+        flash("Session expired. Please sign in again.", "error")
+        return redirect(url_for("login"))
+
+    user_settings = db_get_user_settings(session["user_id"])
+
+    return render_template(
+        "settings.html",
+        user=user,
+        settings=user_settings,
+        currencies=SETTINGS_CURRENCIES,
+        date_formats=SETTINGS_DATE_FORMATS,
+        languages=SETTINGS_LANGUAGES,
+        week_starts=SETTINGS_WEEK_STARTS,
+        payment_methods=SETTINGS_PAYMENT_METHODS,
+        themes=SETTINGS_THEMES,
+        accent_colors=SETTINGS_ACCENT_COLORS,
+        densities=SETTINGS_DENSITIES,
+    )
+
+
+@app.route("/settings/save", methods=["POST"])
+def settings_save():
+    """Save the user's settings from the Settings page.
+
+    Accepts all settings fields as form data. Validates each value against
+    the whitelisted sets in the database layer. Updates the user's profile
+    (name/email) and settings row. Redirects back to /settings.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+
+    # --- Update profile (name/email) ---
+    name = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+
+    if name and email and "@" in email:
+        try:
+            update_user_profile(user_id, name, email)
+            session["user_name"] = name
+        except sqlite3.IntegrityError:
+            flash("Email is already registered by another user.", "error")
+            return redirect(url_for("settings"))
+
+    # --- Update settings ---
+    settings_updates = {}
+    for field in [
+        "currency", "date_format", "language", "week_start",
+        "default_payment_method", "theme", "accent_color", "interface_density",
+    ]:
+        value = request.form.get(field, "").strip()
+        if value:
+            settings_updates[field] = value
+
+    # Budget alert threshold (integer 1-100)
+    threshold_raw = request.form.get("budget_alert_threshold", "").strip()
+    if threshold_raw:
+        settings_updates["budget_alert_threshold"] = threshold_raw
+
+    # Toggle fields (checkboxes send "on" when checked)
+    for field in [
+        "two_factor_enabled", "login_alerts_enabled",
+        "expense_reminders_enabled", "budget_alerts_enabled",
+        "goal_milestones_enabled", "weekly_summary_enabled",
+        "product_updates_enabled", "personalised_insights_enabled",
+        "anonymous_usage_enabled",
+    ]:
+        # Checkbox present means "on", absent means "off"
+        settings_updates[field] = 1 if request.form.get(field) == "on" else 0
+
+    db_update_user_settings(user_id, **settings_updates)
+
+    flash("Settings saved successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/change-password", methods=["POST"])
+def settings_change_password():
+    """Change the user's password from the Settings page.
+
+    Requires the current password to be verified before accepting a new one.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    current_password = request.form.get("current_password", "").strip()
+    new_password = request.form.get("new_password", "").strip()
+    confirm_password = request.form.get("confirm_password", "").strip()
+
+    if not current_password or not new_password or not confirm_password:
+        flash("All password fields are required.", "error")
+        return redirect(url_for("settings"))
+
+    if new_password != confirm_password:
+        flash("New passwords do not match.", "error")
+        return redirect(url_for("settings"))
+
+    if len(new_password) < 8:
+        flash("New password must be at least 8 characters.", "error")
+        return redirect(url_for("settings"))
+
+    # Verify current password
+    user = get_user_by_id(user_id)
+    if user is None:
+        session.clear()
+        return redirect(url_for("login"))
+
+    full_user = get_user_by_email(user["email"])
+    if full_user is None or not check_password_hash(full_user.get("password_hash", ""), current_password):
+        flash("Current password is incorrect.", "error")
+        return redirect(url_for("settings"))
+
+    update_password(user_id, generate_password_hash(new_password))
+    flash("Password changed successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/reset", methods=["POST"])
+def settings_reset():
+    """Reset all user settings to their default values."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    db_reset_user_settings(session["user_id"])
+    flash("Settings reset to defaults.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/export")
+def settings_export():
+    """Export the user's financial data as a CSV file.
+
+    Exports all transactions, budgets, goals, and categories for the user.
+    Returns a text/csv attachment.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    # --- Transactions ---
+    writer.writerow(["=== TRANSACTIONS ==="])
+    writer.writerow(["Date", "Description", "Category", "Payment Method", "Amount"])
+    expenses = db_get_expenses_by_user(user_id)
+    payment_label = {
+        "card": "Card", "upi": "UPI", "cash": "Cash",
+        "bank": "Bank", "wallet": "Wallet",
+    }
+    for exp in expenses:
+        writer.writerow([
+            exp["date"],
+            exp["description"] or "",
+            exp["category"],
+            payment_label.get(exp.get("payment_method"), "Cash"),
+            f"{exp['amount']:.2f}",
+        ])
+
+    # --- Budgets ---
+    writer.writerow([])
+    writer.writerow(["=== BUDGETS ==="])
+    writer.writerow(["Category", "Monthly Limit", "Spent", "Remaining", "Usage %", "Status"])
+    budget_data = db_get_budget_data(user_id)
+    for b in budget_data["budgets"]:
+        writer.writerow([
+            b["name"],
+            f"{b['limit']:.2f}",
+            f"{b['spent']:.2f}",
+            f"{b['remaining']:.2f}",
+            f"{b['pct']:.1f}",
+            b["status_label"],
+        ])
+
+    # --- Goals ---
+    writer.writerow([])
+    writer.writerow(["=== GOALS ==="])
+    writer.writerow(["Name", "Category", "Target", "Saved", "Progress %", "Deadline", "Status"])
+    goals_list = db_get_user_goals(user_id)
+    for g in goals_list:
+        writer.writerow([
+            g["name"],
+            g["category"],
+            f"{g['target_amount']:.2f}",
+            f"{g['saved_amount']:.2f}",
+            f"{g['progress']:.1f}",
+            g["deadline"],
+            g["effective_status"],
+        ])
+
+    # --- Categories ---
+    writer.writerow([])
+    writer.writerow(["=== CATEGORIES ==="])
+    writer.writerow(["Name", "Description", "Icon", "Color", "Transaction Count", "Total Spent"])
+    categories = db_get_categories_export(user_id)
+    for c in categories:
+        writer.writerow([
+            c["name"],
+            c["description"],
+            c["icon"],
+            c["color"],
+            c["transaction_count"],
+            f"{c['total_spent']:.2f}",
+        ])
+
+    from flask import Response
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": "attachment; filename=spendly-data-export.csv"},
+    )
+
+
+@app.route("/settings/clear-data", methods=["POST"])
+def settings_clear_data():
+    """Delete all financial data for the current user.
+
+    Removes expenses, activities, budgets, goals, and categories.
+    The user account itself is left untouched.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    counts = db_clear_user_data(session["user_id"])
+    total = sum(counts.values())
+    flash(f"Cleared {total} record(s) from your account.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/delete-account", methods=["POST"])
+def settings_delete_account():
+    """Permanently delete the current user's account and all data.
+
+    Deletes the user's settings, expenses, activities, budgets, goals,
+    categories, and the user row itself. Clears the session and redirects
+    to the landing page.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    deleted = db_delete_user_account(user_id)
+    if not deleted:
+        flash("Could not delete the account. Please try again.", "error")
+        return redirect(url_for("settings"))
+
+    session.clear()
+    flash("Your account has been deleted. We're sorry to see you go!", "success")
+    return redirect(url_for("landing"))
 
 
 if __name__ == "__main__":
