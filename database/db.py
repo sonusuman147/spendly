@@ -294,6 +294,17 @@ def init_db():
     except sqlite3.OperationalError:
         pass  # Column already exists
 
+    # Add phone and bio columns for the Settings profile fields — safe on repeated runs
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN phone TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
+
     # Add payment_method column to expenses if not already present — safe on repeated runs
     try:
         cursor.execute("ALTER TABLE expenses ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'cash'")
@@ -450,15 +461,16 @@ def link_google_account(user_id, google_id):
 def get_user_by_id(user_id):
     """Look up a user by primary key.
 
-    Returns a dictionary of user fields (id, name, email, created_at,
-    member_since) if found, or None if no match.
+    Returns a dictionary of user fields (id, name, email, phone, bio,
+    created_at, member_since) if found, or None if no match.
     member_since is formatted as 'Month YYYY' (e.g. 'January 2026').
     Uses a parameterized query — safe from SQL injection.
     """
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, name, email, created_at FROM users WHERE id = ?",
+        "SELECT id, name, email, COALESCE(phone, '') AS phone, "
+        "COALESCE(bio, '') AS bio, created_at FROM users WHERE id = ?",
         (user_id,),
     )
     user = cursor.fetchone()
@@ -476,23 +488,49 @@ def get_user_by_id(user_id):
     return None
 
 
-def update_user_profile(user_id, name, email):
-    """Update a user's name and email.
+def update_user_profile(user_id, name, email, phone=None, bio=None):
+    """Update a user's name and email, and optionally phone and bio.
 
-    Returns True if the update was successful.
-    Raises sqlite3.IntegrityError if the email is already taken.
+    Phone and bio are optional — when provided (including an empty string,
+    which clears the field), they are persisted to the users table. When
+    omitted the existing values are left untouched. Returns True if the
+    update was successful. Raises sqlite3.IntegrityError if the email is
+    already taken by another user.
+
+    The write is performed in a single atomic UPDATE inside try/finally
+    so the connection is always closed — even when IntegrityError is raised
+    by the caller (e.g. a duplicate email). This prevents an open uncommitted
+    transaction from holding the SQLite write lock.
     Uses parameterized queries — safe from SQL injection.
     """
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE users SET name = ?, email = ? WHERE id = ?",
-        (name, email, user_id),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
+    try:
+        cursor = conn.cursor()
+
+        if phone is None and bio is None:
+            # Backwards-compatible: profile edit only changes name/email.
+            cursor.execute(
+                "UPDATE users SET name = ?, email = ? WHERE id = ?",
+                (name, email, user_id),
+            )
+        else:
+            cursor.execute(
+                "UPDATE users SET name = ?, email = ?, phone = ?, bio = ? "
+                "WHERE id = ?",
+                (
+                    name,
+                    email,
+                    phone if phone is not None else "",
+                    bio if bio is not None else "",
+                    user_id,
+                ),
+            )
+
+        affected = cursor.rowcount
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
 
 
 def update_password(user_id, new_password_hash):
@@ -2767,15 +2805,25 @@ def update_user_settings(user_id, **kwargs):
     params.append(user_id)
 
     conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE user_settings SET " + ", ".join(columns) + " WHERE user_id = ?",
-        tuple(params),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
+    try:
+        cursor = conn.cursor()
+
+        # Make sure a settings row exists (upsert-style) so updates persist
+        # even if get_user_settings() was never called for this user.
+        cursor.execute(
+            "INSERT OR IGNORE INTO user_settings (user_id) VALUES (?)",
+            (user_id,),
+        )
+
+        cursor.execute(
+            "UPDATE user_settings SET " + ", ".join(columns) + " WHERE user_id = ?",
+            tuple(params),
+        )
+        affected = cursor.rowcount
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
 
 
 def reset_user_settings(user_id):
