@@ -2202,13 +2202,21 @@ def settings_save():
 
     user_id = session["user_id"]
 
-    # --- Update profile (name/email) ---
+    # --- Update profile (name/email/phone/bio) ---
     name = request.form.get("name", "").strip()
     email = request.form.get("email", "").strip()
+    phone = request.form.get("phone", "").strip()
+    bio = request.form.get("bio", "").strip()
 
     if name and email and "@" in email:
         try:
-            update_user_profile(user_id, name, email)
+            update_user_profile(
+                user_id,
+                name,
+                email,
+                phone=phone,
+                bio=bio,
+            )
             session["user_name"] = name
         except sqlite3.IntegrityError:
             flash("Email is already registered by another user.", "error")

@@ -166,14 +166,14 @@
                                     <label for="settings_phone" class="settings-label">Phone number</label>
                                     <div class="settings-input-wrap">
                                         <i data-lucide="phone" class="settings-input-icon"></i>
-                                        <input type="tel" id="settings_phone" name="phone" class="settings-input" value="" placeholder="+91 98765 43210">
+                                        <input type="tel" id="settings_phone" name="phone" class="settings-input" value="{{ user.phone or '' }}" placeholder="+91 98765 43210">
                                     </div>
                                 </div>
                                 <div class="settings-field-group">
                                     <label for="settings_bio" class="settings-label">Bio</label>
                                     <div class="settings-input-wrap">
                                         <i data-lucide="align-left" class="settings-input-icon"></i>
-                                        <input type="text" id="settings_bio" name="bio" class="settings-input" value="" placeholder="Tell us a little about yourself">
+                                        <input type="text" id="settings_bio" name="bio" class="settings-input" value="{{ user.bio or '' }}" placeholder="Tell us a little about yourself">
                                     </div>
                                 </div>
                             </div>
@@ -202,20 +202,20 @@
                         <div class="settings-field-group">
                             <label for="settings_currency" class="settings-label">Currency</label>
                             <select id="settings_currency" name="currency" class="settings-select">
-                                <option value="INR" selected>₹ — Indian Rupee (INR)</option>
-                                <option value="USD">$ — US Dollar (USD)</option>
-                                <option value="EUR">€ — Euro (EUR)</option>
-                                <option value="GBP">£ — British Pound (GBP)</option>
-                                <option value="JPY">¥ — Japanese Yen (JPY)</option>
-                                <option value="AUD">A$ — Australian Dollar (AUD)</option>
+                                <option value="INR" {% if settings.currency == 'INR' %}selected{% endif %}>₹ — Indian Rupee (INR)</option>
+                                <option value="USD" {% if settings.currency == 'USD' %}selected{% endif %}>$ — US Dollar (USD)</option>
+                                <option value="EUR" {% if settings.currency == 'EUR' %}selected{% endif %}>€ — Euro (EUR)</option>
+                                <option value="GBP" {% if settings.currency == 'GBP' %}selected{% endif %}>£ — British Pound (GBP)</option>
+                                <option value="JPY" {% if settings.currency == 'JPY' %}selected{% endif %}>¥ — Japanese Yen (JPY)</option>
+                                <option value="AUD" {% if settings.currency == 'AUD' %}selected{% endif %}>A$ — Australian Dollar (AUD)</option>
                             </select>
                         </div>
                         <div class="settings-field-group">
                             <label for="settings_date_format" class="settings-label">Date format</label>
                             <select id="settings_date_format" name="date_format" class="settings-select">
-                                <option value="DD-MM-YYYY" selected>DD-MM-YYYY</option>
-                                <option value="MM-DD-YYYY">MM-DD-YYYY</option>
-                                <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                <option value="DD-MM-YYYY" {% if settings.date_format == 'DD-MM-YYYY' %}selected{% endif %}>DD-MM-YYYY</option>
+                                <option value="MM-DD-YYYY" {% if settings.date_format == 'MM-DD-YYYY' %}selected{% endif %}>MM-DD-YYYY</option>
+                                <option value="YYYY-MM-DD" {% if settings.date_format == 'YYYY-MM-DD' %}selected{% endif %}>YYYY-MM-DD</option>
                             </select>
                         </div>
                     </div>
@@ -223,19 +223,19 @@
                         <div class="settings-field-group">
                             <label for="settings_language" class="settings-label">Language</label>
                             <select id="settings_language" name="language" class="settings-select">
-                                <option value="en" selected>English</option>
-                                <option value="hi">हिन्दी (Hindi)</option>
-                                <option value="bn">বাংলা (Bengali)</option>
-                                <option value="ta">தமிழ் (Tamil)</option>
-                                <option value="te">తెలుగు (Telugu)</option>
+                                <option value="en" {% if settings.language == 'en' %}selected{% endif %}>English</option>
+                                <option value="hi" {% if settings.language == 'hi' %}selected{% endif %}>हिन्दी (Hindi)</option>
+                                <option value="bn" {% if settings.language == 'bn' %}selected{% endif %}>বাংলা (Bengali)</option>
+                                <option value="ta" {% if settings.language == 'ta' %}selected{% endif %}>தமிழ் (Tamil)</option>
+                                <option value="te" {% if settings.language == 'te' %}selected{% endif %}>తెలుగు (Telugu)</option>
                             </select>
                         </div>
                         <div class="settings-field-group">
                             <label for="settings_week_start" class="settings-label">Week starts on</label>
                             <select id="settings_week_start" name="week_start" class="settings-select">
-                                <option value="monday" selected>Monday</option>
-                                <option value="sunday">Sunday</option>
-                                <option value="saturday">Saturday</option>
+                                <option value="monday" {% if settings.week_start == 'monday' %}selected{% endif %}>Monday</option>
+                                <option value="sunday" {% if settings.week_start == 'sunday' %}selected{% endif %}>Sunday</option>
+                                <option value="saturday" {% if settings.week_start == 'saturday' %}selected{% endif %}>Saturday</option>
                             </select>
                         </div>
                     </div>
@@ -244,20 +244,28 @@
                             <label for="settings_budget_alert" class="settings-label">Budget alert threshold</label>
                             <div class="settings-input-wrap">
                                 <i data-lucide="gauge" class="settings-input-icon"></i>
-                                <input type="number" id="settings_budget_alert" name="budget_alert" class="settings-input" value="80" min="1" max="100" step="5">
+                                <input type="number" id="settings_budget_alert" name="budget_alert" class="settings-input" value="{{ settings.budget_alert_threshold }}" min="1" max="100" step="5">
                             </div>
                             <span class="settings-hint">Notify me when a budget reaches this % of its limit.</span>
                         </div>
                         <div class="settings-field-group">
                             <label for="settings_default_payment" class="settings-label">Default payment method</label>
                             <select id="settings_default_payment" name="default_payment" class="settings-select">
-                                <option value="upi" selected>UPI</option>
-                                <option value="card">Card</option>
-                                <option value="cash">Cash</option>
-                                <option value="bank">Bank Transfer</option>
-                                <option value="wallet">Wallet</option>
+                                <option value="upi" {% if settings.default_payment_method == 'upi' %}selected{% endif %}>UPI</option>
+                                <option value="card" {% if settings.default_payment_method == 'card' %}selected{% endif %}>Card</option>
+                                <option value="cash" {% if settings.default_payment_method == 'cash' %}selected{% endif %}>Cash</option>
+                                <option value="bank" {% if settings.default_payment_method == 'bank' %}selected{% endif %}>Bank Transfer</option>
+                                <option value="wallet" {% if settings.default_payment_method == 'wallet' %}selected{% endif %}>Wallet</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="settings-note">
+                        <i data-lucide="rotate-ccw" class="settings-note-icon"></i>
+                        <span>Reset all preference fields to their default values.</span>
+                        <button type="button" class="btn-settings-ghost btn-settings-reset" data-settings-reset>
+                            <i data-lucide="rotate-ccw" class="settings-icon-sm"></i>
+                            Reset to defaults
+                        </button>
                     </div>
                 </div>
             </div>
@@ -300,7 +308,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" data-settings-toggle>
+                            <input type="checkbox" {% if settings.two_factor_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -330,7 +338,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.login_alerts_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -358,7 +366,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.expense_reminders_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -371,7 +379,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.budget_alerts_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -384,7 +392,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.goal_milestones_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -397,7 +405,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.weekly_summary_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -410,7 +418,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" data-settings-toggle>
+                            <input type="checkbox" {% if settings.product_updates_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -431,7 +439,7 @@
                 <div class="settings-card-body">
                     <div class="settings-theme-grid">
                         <label class="settings-theme-card">
-                            <input type="radio" name="settings_theme" value="light" data-settings-theme>
+                            <input type="radio" name="settings_theme" value="light" {% if settings.theme == 'light' %}checked{% endif %} data-settings-theme>
                             <span class="settings-theme-preview settings-theme-preview-light">
                                 <span class="settings-theme-preview-bar"></span>
                                 <span class="settings-theme-preview-card"></span>
@@ -443,7 +451,7 @@
                             </span>
                         </label>
                         <label class="settings-theme-card">
-                            <input type="radio" name="settings_theme" value="dark" data-settings-theme>
+                            <input type="radio" name="settings_theme" value="dark" {% if settings.theme == 'dark' %}checked{% endif %} data-settings-theme>
                             <span class="settings-theme-preview settings-theme-preview-dark">
                                 <span class="settings-theme-preview-bar"></span>
                                 <span class="settings-theme-preview-card"></span>
@@ -455,7 +463,7 @@
                             </span>
                         </label>
                         <label class="settings-theme-card">
-                            <input type="radio" name="settings_theme" value="system" data-settings-theme>
+                            <input type="radio" name="settings_theme" value="system" {% if settings.theme == 'system' %}checked{% endif %} data-settings-theme>
                             <span class="settings-theme-preview settings-theme-preview-system">
                                 <span class="settings-theme-preview-bar"></span>
                                 <span class="settings-theme-preview-card"></span>
@@ -472,23 +480,23 @@
                             <label for="settings_accent" class="settings-label">Accent colour</label>
                             <div class="settings-accent-row">
                                 <label class="settings-accent-swatch" title="Spendly Green">
-                                    <input type="radio" name="settings_accent" value="green" checked>
+                                    <input type="radio" name="settings_accent" value="green" {% if settings.accent_color == 'green' %}checked{% endif %}>
                                     <span class="settings-accent-dot" style="--swatch: #1a472a;"></span>
                                 </label>
                                 <label class="settings-accent-swatch" title="Ocean Blue">
-                                    <input type="radio" name="settings_accent" value="blue">
+                                    <input type="radio" name="settings_accent" value="blue" {% if settings.accent_color == 'blue' %}checked{% endif %}>
                                     <span class="settings-accent-dot" style="--swatch: #2563eb;"></span>
                                 </label>
                                 <label class="settings-accent-swatch" title="Royal Purple">
-                                    <input type="radio" name="settings_accent" value="purple">
+                                    <input type="radio" name="settings_accent" value="purple" {% if settings.accent_color == 'purple' %}checked{% endif %}>
                                     <span class="settings-accent-dot" style="--swatch: #7c3aed;"></span>
                                 </label>
                                 <label class="settings-accent-swatch" title="Warm Amber">
-                                    <input type="radio" name="settings_accent" value="amber">
+                                    <input type="radio" name="settings_accent" value="amber" {% if settings.accent_color == 'amber' %}checked{% endif %}>
                                     <span class="settings-accent-dot" style="--swatch: #d97706;"></span>
                                 </label>
                                 <label class="settings-accent-swatch" title="Rose Pink">
-                                    <input type="radio" name="settings_accent" value="rose">
+                                    <input type="radio" name="settings_accent" value="rose" {% if settings.accent_color == 'rose' %}checked{% endif %}>
                                     <span class="settings-accent-dot" style="--swatch: #db2777;"></span>
                                 </label>
                             </div>
@@ -496,8 +504,8 @@
                         <div class="settings-field-group">
                             <label for="settings_density" class="settings-label">Interface density</label>
                             <select id="settings_density" name="density" class="settings-select">
-                                <option value="comfortable" selected>Comfortable</option>
-                                <option value="compact">Compact</option>
+                                <option value="comfortable" {% if settings.interface_density == 'comfortable' %}selected{% endif %}>Comfortable</option>
+                                <option value="compact" {% if settings.interface_density == 'compact' %}selected{% endif %}>Compact</option>
                             </select>
                         </div>
                     </div>
@@ -525,7 +533,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" checked data-settings-toggle>
+                            <input type="checkbox" {% if settings.personalised_insights_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>
@@ -538,7 +546,7 @@
                             </div>
                         </div>
                         <label class="settings-toggle">
-                            <input type="checkbox" data-settings-toggle>
+                            <input type="checkbox" {% if settings.anonymous_usage_enabled %}checked{% endif %} data-settings-toggle>
                             <span class="settings-toggle-track"></span>
                         </label>
                     </div>

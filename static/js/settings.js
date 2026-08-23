@@ -59,6 +59,18 @@
     }
 
     /* ------------------------------------------------------------------ */
+    /* Reset to Defaults                                                   */
+    /* ------------------------------------------------------------------ */
+
+    function bindResetAction() {
+        var resetBtn = getEl('[data-settings-reset]');
+        if (!resetBtn) return;
+        resetBtn.addEventListener('click', function () {
+            submitTo('/settings/reset');
+        });
+    }
+
+    /* ------------------------------------------------------------------ */
     /* Theme Selection                                                     */
     /* ------------------------------------------------------------------ */
 
@@ -85,12 +97,17 @@
             });
         });
 
-        // Restore saved theme on load
-        var saved = localStorage.getItem('spendly-theme');
-        if (saved) {
-            var savedInput = getEl('[data-settings-theme][value="' + saved + '"]');
-            if (savedInput) savedInput.checked = true;
+        // Sync the header theme switch to the server-persisted theme on
+        // load. The server-rendered radio is already checked from settings.
+        var checkedTheme = getEl('[data-settings-theme]:checked');
+        if (checkedTheme) {
+            var headerInput = document.getElementById('theme-' + checkedTheme.value);
+            if (headerInput) headerInput.checked = true;
         }
+        // The theme is persisted on the backend. Remove any stale
+        // localStorage-only override so the page always reflects the
+        // server-persisted theme when loaded.
+        localStorage.removeItem('spendly-theme');
     }
 
     /* ------------------------------------------------------------------ */
@@ -153,6 +170,8 @@
         // Profile fields
         var nameInput = getEl('#settings_name');
         var emailInput = getEl('#settings_email');
+        var phoneInput = getEl('#settings_phone');
+        var bioInput = getEl('#settings_bio');
         if (nameInput) {
             var nameField = document.createElement('input');
             nameField.type = 'hidden';
@@ -166,6 +185,20 @@
             emailField.name = 'email';
             emailField.value = emailInput.value;
             form.appendChild(emailField);
+        }
+        if (phoneInput) {
+            var phoneField = document.createElement('input');
+            phoneField.type = 'hidden';
+            phoneField.name = 'phone';
+            phoneField.value = phoneInput.value;
+            form.appendChild(phoneField);
+        }
+        if (bioInput) {
+            var bioField = document.createElement('input');
+            bioField.type = 'hidden';
+            bioField.name = 'bio';
+            bioField.value = bioInput.value;
+            form.appendChild(bioField);
         }
 
         // Preference selects
@@ -286,9 +319,18 @@
         var discardBtn = getEl('[data-discard-changes]');
         if (discardBtn) {
             discardBtn.addEventListener('click', function () {
+                revertToSaved();
                 markClean();
                 showToast('Changes discarded');
+                refreshIcons();
             });
+        }
+
+        // Reload the page so all inputs are restored from the server's
+        // persisted values — a true "discard" with no unsaved changes left
+        // in the DOM.
+        function revertToSaved() {
+            window.location.reload();
         }
     }
 
@@ -554,6 +596,7 @@
 
     function init() {
         bindNav();
+        bindResetAction();
         bindThemeSelection();
         bindDirtyTracking();
         bindSaveActions();
