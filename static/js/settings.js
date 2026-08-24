@@ -451,14 +451,12 @@
     /* Session Revoke                                                      */
     /* ------------------------------------------------------------------ */
 
+    // Session revoke is handled by the server-side form POST. The buttons
+    // inside the sessions modal are real submit buttons that post to
+    // /settings/sessions/revoke with the session id. No client-side
+    // manipulation is needed — the page reloads with the updated list.
     function bindSessionActions() {
-        getAll('[data-revoke-session]').forEach(function (btn) {
-            btn.addEventListener('click', function () {
-                var item = btn.closest('.settings-session-item');
-                if (item) item.remove();
-                showToast('Session revoked');
-            });
-        });
+        // No-op — revoke is handled by the native form submission.
     }
 
     /* ------------------------------------------------------------------ */
