@@ -277,17 +277,6 @@ def init_db():
         )
     """)
 
-    # Active sessions table — tracks authenticated devices so the Settings
-    # page can display and revoke real sessions. Safe to create repeatedly.
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            token TEXT NOT NULL,
-            user_agent TEXT DEFAULT '',
-            ip_address TEXT DEFAULT '',
-            created_at TEXT DEFAULT (datetime('now')),
-            last_seen TEXT DEFAULT (datetime('now'))
         )
     """)
 
@@ -2626,4 +2615,3 @@ def get_recent_activity(user_id, limit=8, category=None):
         )
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
-    return rows

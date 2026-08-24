@@ -325,9 +325,7 @@ def privacy():
     return render_template("privacy.html")
 
 
-def _new_session_token():
-    """Generate a cryptographically random token for a new session."""
-    return secrets.token_urlsafe(32)
+
 
 
 @app.route("/logout")

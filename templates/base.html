@@ -109,10 +109,9 @@
                         </a>
                     </li>
                     <li>
-                        <a href="#" class="sidebar-link is-disabled" aria-disabled="true" title="Coming soon">
+                        <a href="{{ url_for('help') }}" class="sidebar-link {% if request.endpoint == 'help' %}active{% endif %}">
                             <i data-lucide="circle-help" class="sidebar-link-icon"></i>
                             <span class="sidebar-link-text">Help &amp; Support</span>
-                            <span class="sidebar-badge">Soon</span>
                         </a>
                     </li>
                 </ul>
