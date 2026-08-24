@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
-<body data-accent="{{ user_settings.accent_color if user_settings else 'green' }}">
+<body>
 
     <!-- =============================================================== -->
     <!-- AUTHENTICATED APP SHELL — Left Sidebar Layout                    -->
@@ -165,7 +165,7 @@
                     <!-- Theme switch -->
                     <div class="theme-field app-theme-field">
                         <div class="theme-switch" role="radiogroup" aria-label="Theme">
-                            <input type="radio" name="theme" id="theme-light" value="light" {% if user_settings and user_settings.theme == 'light' %}checked{% endif %}>
+                            <input type="radio" name="theme" id="theme-light" value="light">
                             <label for="theme-light" aria-label="Light theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">
@@ -176,7 +176,7 @@
                                 </svg>
                             </label>
 
-                            <input type="radio" name="theme" id="theme-dark" value="dark" {% if not user_settings or user_settings.theme == 'dark' %}checked{% endif %}>
+                            <input type="radio" name="theme" id="theme-dark" value="dark" checked>
                             <label for="theme-dark" aria-label="Dark theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">
@@ -184,7 +184,7 @@
                                 </svg>
                             </label>
 
-                            <input type="radio" name="theme" id="theme-system" value="system" {% if user_settings and user_settings.theme == 'system' %}checked{% endif %}>
+                            <input type="radio" name="theme" id="theme-system" value="system">
                             <label for="theme-system" aria-label="System theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">

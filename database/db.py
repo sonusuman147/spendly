@@ -277,6 +277,55 @@ def init_db():
         )
     """)
 
+    # --- Help & Support module tables ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            ticket_no TEXT UNIQUE NOT NULL,
+            subject TEXT NOT NULL,
+            category TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT 'normal',
+            message TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER NOT NULL REFERENCES support_tickets(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            author TEXT NOT NULL,
+            body TEXT NOT NULL,
+            is_staff INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            title TEXT NOT NULL,
+            excerpt TEXT NOT NULL,
+            body TEXT NOT NULL,
+            is_public INTEGER NOT NULL DEFAULT 1,
+            article_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_faqs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            faq_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
         )
     """)
 
@@ -904,369 +953,6 @@ def get_expenses_by_ids(user_id, ids):
     return rows
 
 
-def delete_expenses_bulk(user_id, ids):
-    """Delete multiple expense rows, scoped to the owning user.
-
-    Only rows that belong to `user_id` are deleted — foreign ids are
-    silently ignored. Returns the number of rows deleted. Uses parameterized
-    queries — safe from SQL injection.
-    """
-    if not ids:
-        return 0
-    conn = get_db()
-    cursor = conn.cursor()
-    placeholders = ",".join("?" for _ in ids)
-    cursor.execute(
-        f"DELETE FROM expenses WHERE user_id = ? AND id IN ({placeholders})",
-        (user_id, *ids),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected
-
-
-# ================================================================== #
-# Categories module — DB layer                                       #
-# ================================================================== #
-
-def ensure_default_categories(user_id):
-    """Insert the default category rows for a user if they don't exist.
-
-    Uses INSERT OR IGNORE so existing rows are never duplicated. Returns
-    the number of rows inserted. Uses parameterized queries — safe from
-    SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    inserted = 0
-    for name, desc, icon, color in DEFAULT_CATEGORIES:
-        cursor.execute(
-            "INSERT OR IGNORE INTO categories (user_id, name, description, icon, color) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (user_id, name, desc, icon, color),
-        )
-        inserted += cursor.rowcount
-    conn.commit()
-    conn.close()
-    return inserted
-
-
-def backfill_categories():
-    """Ensure every existing user has default category rows.
-
-    Iterates over all users and calls ensure_default_categories for each.
-    Safe to call repeatedly. Returns the total number of rows inserted.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT id FROM users")
-    user_ids = [row["id"] for row in cursor.fetchall()]
-    conn.close()
-
-    total = 0
-    for uid in user_ids:
-        total += ensure_default_categories(uid)
-    return total
-
-
-def get_user_categories(user_id):
-    """Return all categories for a user, ordered by name.
-
-    Returns a list of dicts with id, name, description, icon, color,
-    created_at, transaction_count, total_spent, avg_expense. Empty list
-    if none. Uses parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT c.id, c.name, c.description, c.icon, c.color, c.created_at, "
-        "COUNT(e.id) AS transaction_count, "
-        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
-        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
-        "FROM categories c "
-        "LEFT JOIN expenses e ON e.category = c.name AND e.user_id = c.user_id "
-        "WHERE c.user_id = ? "
-        "GROUP BY c.id "
-        "ORDER BY c.name COLLATE NOCASE ASC",
-        (user_id,),
-    )
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return rows
-
-
-def create_category(user_id, name, description, icon, color):
-    """Create a new category for a user and return its id.
-
-    Raises sqlite3.IntegrityError if a category with the same name already
-    exists for this user. Uses parameterized queries — safe from SQL
-    injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO categories (user_id, name, description, icon, color) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (user_id, name, description, icon, color),
-    )
-    category_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return category_id
-
-
-def get_category_by_id(category_id, user_id):
-    """Return a single category scoped to the user, or None if not found/owned.
-
-    Uses parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT c.id, c.name, c.description, c.icon, c.color, c.created_at, "
-        "COUNT(e.id) AS transaction_count, "
-        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
-        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
-        "FROM categories c "
-        "LEFT JOIN expenses e ON e.category = c.name AND e.user_id = c.user_id "
-        "WHERE c.id = ? AND c.user_id = ? "
-        "GROUP BY c.id",
-        (category_id, user_id),
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def update_category(category_id, user_id, name, description, icon, color):
-    """Update a category row WHERE id = ? AND user_id = ?.
-
-    Returns True if a row was updated, False if no matching row found.
-    Raises sqlite3.IntegrityError if the new name collides with another
-    category for this user. Uses parameterized queries — safe from SQL
-    injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE categories SET name = ?, description = ?, icon = ?, color = ? "
-        "WHERE id = ? AND user_id = ?",
-        (name, description, icon, color, category_id, user_id),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-def delete_category(category_id, user_id, reassign=True):
-    """Delete a category row WHERE id = ? AND user_id = ?.
-
-    When `reassign` is True, any expenses using this category are
-    reassigned to 'Other' before the category is deleted. Returns True if
-    a row was deleted, False if no matching row found. Uses parameterized
-    queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Fetch the category name first (scoped to the user).
-    cursor.execute(
-        "SELECT name FROM categories WHERE id = ? AND user_id = ?",
-        (category_id, user_id),
-    )
-    row = cursor.fetchone()
-    if row is None:
-        conn.close()
-        return False
-
-    name = row["name"]
-
-    if reassign:
-        cursor.execute(
-            "UPDATE expenses SET category = 'Other' WHERE user_id = ? AND category = ?",
-            (user_id, name),
-        )
-
-    cursor.execute(
-        "DELETE FROM categories WHERE id = ? AND user_id = ?",
-        (category_id, user_id),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-def get_categories(user_id, search="", sort="name-asc", page=1, per_page=8):
-    """Fetch paginated, server-side filtered categories for a user.
-
-    Returns a dict with items, total, pages, page, per_page, has_prev,
-    has_next. `sort` is validated against CATEGORY_SORT_OPTIONS. Uses
-    parameterized queries — safe from SQL injection.
-    """
-    sort_sql = CATEGORY_SORT_OPTIONS.get(sort, CATEGORY_SORT_OPTIONS["name-asc"])
-
-    where = "WHERE c.user_id = ?"
-    params = [user_id]
-    if search:
-        where += " AND (c.name LIKE ? OR c.description LIKE ?)"
-        like = f"%{search}%"
-        params.append(like)
-        params.append(like)
-
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        f"SELECT COUNT(*) AS total FROM categories c {where}",
-        tuple(params),
-    )
-    total = cursor.fetchone()["total"]
-
-    if per_page is None or per_page <= 0:
-        per_page = total if total > 0 else 1
-    pages = max(1, (total + per_page - 1) // per_page)
-    page = max(1, min(int(page), pages))
-
-    cursor.execute(
-        "SELECT c.id, c.name, c.description, c.icon, c.color, c.created_at, "
-        "COUNT(e.id) AS transaction_count, "
-        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
-        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
-        f"FROM categories c {where} "
-        "LEFT JOIN expenses e ON e.category = c.name AND e.user_id = c.user_id "
-        "GROUP BY c.id "
-        f"ORDER BY {sort_sql} LIMIT ? OFFSET ?",
-        tuple(params) + (per_page, (page - 1) * per_page),
-    )
-    items = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-
-    return {
-        "items": items,
-        "total": total,
-        "pages": pages,
-        "page": page,
-        "per_page": per_page,
-        "has_prev": page > 1,
-        "has_next": page < pages,
-    }
-
-
-def get_category_stats(user_id):
-    """Return summary statistics for the Categories page.
-
-    Returns a dict with total_categories, total_transactions, total_spent,
-    top_category, avg_per_category. Uses parameterized queries — safe from
-    SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-
-    cursor.execute(
-        "SELECT COUNT(*) AS total_categories FROM categories WHERE user_id = ?",
-        (user_id,),
-    )
-    total_categories = cursor.fetchone()["total_categories"]
-
-    cursor.execute(
-        "SELECT COUNT(*) AS total_transactions, COALESCE(SUM(amount), 0.0) AS total_spent "
-        "FROM expenses WHERE user_id = ?",
-        (user_id,),
-    )
-    row = cursor.fetchone()
-    total_transactions = row["total_transactions"]
-    total_spent = row["total_spent"]
-
-    cursor.execute(
-        "SELECT category, COALESCE(SUM(amount), 0.0) AS total "
-        "FROM expenses WHERE user_id = ? "
-        "GROUP BY category ORDER BY total DESC LIMIT 1",
-        (user_id,),
-    )
-    top = cursor.fetchone()
-    top_category = top["category"] if top else "—"
-
-    conn.close()
-
-    return {
-        "total_categories": total_categories,
-        "total_transactions": total_transactions,
-        "total_spent": round(total_spent, 2),
-        "top_category": top_category,
-        "avg_per_category": round(total_spent / total_categories, 2) if total_categories > 0 else 0.0,
-    }
-
-
-def get_categories_export(user_id):
-    """Return all categories with usage stats for CSV export.
-
-    Returns a list of dicts with name, description, icon, color, created_at,
-    transaction_count, total_spent, avg_expense. Uses parameterized queries.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT c.name, c.description, c.icon, c.color, c.created_at, "
-        "COUNT(e.id) AS transaction_count, "
-        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
-        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
-        "FROM categories c "
-        "LEFT JOIN expenses e ON e.category = c.name AND e.user_id = c.user_id "
-        "WHERE c.user_id = ? "
-        "GROUP BY c.id "
-        "ORDER BY c.name COLLATE NOCASE ASC",
-        (user_id,),
-    )
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return rows
-
-
-def merge_categories(user_id, source_id, target_id):
-    """Merge a source category into a target category.
-
-    Reassigns all expenses from the source category to the target category,
-    then deletes the source category. Both must belong to the user. Returns
-    True on success, False if either category is missing or not owned.
-    Uses parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # Fetch both category names (scoped to the user).
-    cursor.execute(
-        "SELECT id, name FROM categories WHERE id IN (?, ?) AND user_id = ?",
-        (source_id, target_id, user_id),
-    )
-    rows = cursor.fetchall()
-    if len(rows) != 2:
-        conn.close()
-        return False
-
-    names = {row["id"]: row["name"] for row in rows}
-    source_name = names[source_id]
-    target_name = names[target_id]
-
-    # Reassign expenses.
-    cursor.execute(
-        "UPDATE expenses SET category = ? WHERE user_id = ? AND category = ?",
-        (target_name, user_id, source_name),
-    )
-
-    # Delete the source category.
-    cursor.execute(
-        "DELETE FROM categories WHERE id = ? AND user_id = ?",
-        (source_id, user_id),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
 # ================================================================== #
 # Budgets module — DB layer                                          #
 # ================================================================== #
@@ -1302,26 +988,6 @@ BUDGET_CATEGORY_ICONS = {
 def _budget_limit(category):
     """Return the configured monthly budget for a category (or the default)."""
     return BUDGET_LIMITS.get(category, DEFAULT_BUDGET_LIMIT)
-
-
-def _effective_budget_limits(user_id):
-    """Return a dict of category -> effective limit for a user.
-
-    User-defined budget rows override the static defaults. Uses
-    parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT category, limit_amount FROM budgets WHERE user_id = ?",
-        (user_id,),
-    )
-    user_budgets = {row["category"]: row["limit_amount"] for row in cursor.fetchall()}
-    conn.close()
-
-    limits = dict(BUDGET_LIMITS)
-    limits.update(user_budgets)
-    return limits
 
 
 def _budget_status(pct):
@@ -1384,21 +1050,28 @@ def create_budget(user_id, category, limit):
         "INSERT INTO budgets (user_id, category, limit_amount, period, is_default) "
         "VALUES (?, ?, ?, 'monthly', 0) "
         "ON CONFLICT(user_id, category) DO UPDATE SET "
-        "limit_amount = excluded.limit_amount, period = 'monthly', is_default = 0",
-        (user_id, category, limit),
+        "limit_amount = excluded.limit_amount, is_default = 0",
+        (user_id, category, float(limit)),
     )
     budget_id = cursor.lastrowid
+    if budget_id is None:
+        # Upsert may not return lastrowid on some builds; fetch it.
+        cursor.execute(
+            "SELECT id FROM budgets WHERE user_id = ? AND category = ?",
+            (user_id, category),
+        )
+        row = cursor.fetchone()
+        budget_id = row["id"] if row else None
     conn.commit()
     conn.close()
     return budget_id
 
 
 def update_budget_limit(user_id, category, limit):
-    """Update a per-user budget limit for a category (ownership enforced).
+    """Update a budget's limit for a user/category.
 
-    Uses an upsert so updating a limit for a category that has no row yet
-    creates it. Returns True if a row was updated/created, False otherwise.
-    Uses parameterized queries — safe from SQL injection.
+    Creates the row if it does not yet exist (upsert). Returns True if a
+    row was affected. Uses parameterized queries — safe from SQL injection.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -1406,8 +1079,8 @@ def update_budget_limit(user_id, category, limit):
         "INSERT INTO budgets (user_id, category, limit_amount, period, is_default) "
         "VALUES (?, ?, ?, 'monthly', 0) "
         "ON CONFLICT(user_id, category) DO UPDATE SET "
-        "limit_amount = excluded.limit_amount, period = 'monthly', is_default = 0",
-        (user_id, category, limit),
+        "limit_amount = excluded.limit_amount, is_default = 0",
+        (user_id, category, float(limit)),
     )
     affected = cursor.rowcount
     conn.commit()
@@ -1416,7 +1089,7 @@ def update_budget_limit(user_id, category, limit):
 
 
 def delete_budget(user_id, category):
-    """Delete a per-user budget row (ownership enforced).
+    """Delete a per-user budget row for a category.
 
     Returns True if a row was deleted, False if no matching row found.
     Uses parameterized queries — safe from SQL injection.
@@ -1434,24 +1107,42 @@ def delete_budget(user_id, category):
 
 
 def reset_budget_defaults(user_id):
-    """Delete all per-user budget rows so defaults are used again.
+    """Remove all per-user budget rows so defaults are used again.
 
-    Returns the number of rows removed. Uses parameterized queries.
+    Returns the number of rows removed. Uses parameterized queries — safe
+    from SQL injection.
     """
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("DELETE FROM budgets WHERE user_id = ?", (user_id,))
+    cursor.execute(
+        "DELETE FROM budgets WHERE user_id = ?",
+        (user_id,),
+    )
     affected = cursor.rowcount
     conn.commit()
     conn.close()
     return affected
 
 
+def _effective_budget_limits(user_id):
+    """Return a dict of category -> limit merging user rows over defaults.
+
+    For every category in BUDGET_LIMITS, use the user's per-category limit
+    if one exists, otherwise fall back to the static default. Any per-user
+    rows for categories not in BUDGET_LIMITS are appended with their limit.
+    """
+    limits = dict(BUDGET_LIMITS)
+    user_rows = get_user_budgets(user_id)
+    for row in user_rows:
+        limits[row["category"]] = float(row["limit_amount"])
+    return limits
+
+
 def get_budget_months(user_id):
     """Return the distinct months (YYYY-MM) that have expenses for a user.
 
-    Used to populate the Budgets page month filter. Returns a list of
-    strings ordered newest first. Uses parameterized queries.
+    Used to populate the month filter dropdown on the Budgets page. Ordered
+    newest first. Returns a list of {value, label} dicts.
     """
     conn = get_db()
     cursor = conn.cursor()
@@ -1461,209 +1152,344 @@ def get_budget_months(user_id):
         "ORDER BY month DESC",
         (user_id,),
     )
-    months = [row["month"] for row in cursor.fetchall()]
+    months = []
+    for row in cursor.fetchall():
+        value = row["month"]
+        parts = value.split("-")
+        label = f"{MONTH_LABELS[int(parts[1])]} {parts[0]}"
+        months.append({"value": value, "label": label})
     conn.close()
     return months
 
 
 def get_budget_data(user_id, month=None, category=None, status=None):
-    """Return the full Budgets dashboard dataset for a user.
+    """Compute the full Budgets module data for a user.
 
-    Computes per-category budget limits (user-defined rows falling back to
-    static defaults), actual spending, remaining, usage %, and status.
-    Supports optional month, category, and status filters. Returns a dict
-    with summary cards, budget rows, trend, distribution, alerts, and
-    recent activity. Uses parameterized queries — safe from SQL injection.
+    Budget limits come from the static BUDGET_LIMITS constants (there is no
+    dedicated budgets table). Actuals are derived from the user's real expense
+    rows, grouped by category and month.
+
+    Args:
+        user_id: the owning user.
+        month: optional "YYYY-MM" filter (defaults to the current month).
+        category: optional category name filter.
+        status: optional status key filter ("on-track" | "warning" | "over").
+
+    Returns a dict with:
+      - budgets: list of {name, icon, color, limit, spent, remaining, period,
+                 pct, status_key, status_label}
+      - summary: {total_budget, total_spent, remaining, pct, over_count,
+                 daily, days_left}
+      - monthly_trend: list of {label, budget, actual} for the last
+        BUDGET_TREND_MONTHS months
+      - distribution: list of {name, color, limit} for the donut
+      - insights: list of {icon, accent, title, text}
+      - activity: list of {id, action, category, description, amount,
+                 created_at, time_label}
+      - months: list of {value, label} distinct expense months
+      - filter_info: {month, category, status}
     """
-    # Base WHERE for expenses (user + optional month/category filters).
-    where = "WHERE user_id = ?"
-    params = [user_id]
-    if month:
-        where += " AND strftime('%Y-%m', date) = ?"
-        params.append(month)
+    # Default the month filter to the current calendar month.
+    if not month:
+        today = date.today()
+        month = f"{today.year:04d}-{today.month:02d}"
+
+    # --- Category spending for the selected month (grouped by category) ---
+    conn = get_db()
+    cursor = conn.cursor()
+
+    where = "WHERE user_id = ? AND strftime('%Y-%m', date) = ?"
+    params = [user_id, month]
     if category:
         where += " AND category = ?"
         params.append(category)
 
-    conn = get_db()
-    cursor = conn.cursor()
-
-    # ---- Total spent (filtered) ----
     cursor.execute(
-        f"SELECT COALESCE(SUM(amount), 0.0) AS total FROM expenses {where}",
+        "SELECT category, COALESCE(SUM(amount), 0.0) AS spent "
+        f"FROM expenses {where} "
+        "GROUP BY category ORDER BY spent DESC",
         tuple(params),
     )
-    total_spent = cursor.fetchone()["total"]
+    spent_by_cat = {row["category"]: row["spent"] for row in cursor.fetchall()}
 
-    # ---- Per-category actual spending (filtered) ----
+    # --- Monthly actuals for the trend chart (last N months) ---
     cursor.execute(
-        f"SELECT category, COALESCE(SUM(amount), 0.0) AS spent, COUNT(*) AS count "
-        f"FROM expenses {where} GROUP BY category",
-        tuple(params),
-    )
-    actual = {row["category"]: {"spent": row["spent"], "count": row["count"]} for row in cursor.fetchall()}
-
-    # ---- User-defined budget rows ----
-    cursor.execute(
-        "SELECT category, limit_amount FROM budgets WHERE user_id = ?",
+        "SELECT strftime('%Y-%m', date) AS month, COALESCE(SUM(amount), 0.0) AS actual "
+        "FROM expenses WHERE user_id = ? "
+        "GROUP BY month ORDER BY month ASC",
         (user_id,),
     )
-    user_budgets = {row["category"]: row["limit_amount"] for row in cursor.fetchall()}
+    actual_by_month = {row["month"]: row["actual"] for row in cursor.fetchall()}
 
-    # ---- Recent activity (for the panel) ----
+    # --- Recent activity (for the timeline) ---
     cursor.execute(
         "SELECT id, action, category, description, amount, created_at "
         "FROM activities WHERE user_id = ? "
         "ORDER BY created_at DESC, id DESC LIMIT 8",
         (user_id,),
     )
-    recent_activity = [dict(row) for row in cursor.fetchall()]
-
+    activity_rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
 
-    # ---- Build the budget rows ----
-    all_categories = set(BUDGET_LIMITS.keys()) | set(user_budgets.keys()) | set(actual.keys())
+# --- Build the per-category budget list ---
+    # Show every configured budget category, merging any per-user limits
+    # over the static defaults. If a category filter is set, only that
+    # category is included.
+    effective_limits = _effective_budget_limits(user_id)
     budgets = []
-    for cat in sorted(all_categories):
-        limit = user_budgets.get(cat, _budget_limit(cat))
-        spent = actual.get(cat, {}).get("spent", 0.0)
-        count = actual.get(cat, {}).get("count", 0)
-        remaining = max(0.0, limit - spent)
+    for cat, limit in effective_limits.items():
+        if category and cat != category:
+            continue
+        spent = spent_by_cat.get(cat, 0.0)
+        remaining = limit - spent
         pct = (spent / limit * 100) if limit > 0 else 0.0
-        status_key, status_label = _budget_status(pct)
-        budgets.append({
+        s_key, s_label = _budget_status(pct)
+
+        b = {
             "name": cat,
+            "icon": BUDGET_CATEGORY_ICONS.get(cat, "circle"),
+            "color": BUDGET_CATEGORY_COLORS.get(cat, "var(--accent)"),
             "limit": round(limit, 2),
             "spent": round(spent, 2),
             "remaining": round(remaining, 2),
+            "period": "This month",
             "pct": round(pct, 1),
-            "count": count,
-            "status": status_key,
-            "status_label": status_label,
-            "is_default": cat not in user_budgets,
-            "icon": BUDGET_CATEGORY_ICONS.get(cat, "tag"),
-            "color": BUDGET_CATEGORY_COLORS.get(cat, "var(--ink-muted)"),
-        })
+            "status_key": s_key,
+            "status_label": s_label,
+        }
+        budgets.append(b)
 
-    # Apply status filter if provided.
+    # Apply the status filter if requested.
     if status:
-        budgets = [b for b in budgets if b["status"] == status]
+        budgets = [b for b in budgets if b["status_key"] == status]
 
-    # ---- Summary cards ----
-    total_limit = sum(b["limit"] for b in budgets)
-    total_remaining = sum(b["remaining"] for b in budgets)
-    over_count = sum(1 for b in budgets if b["status"] == "over")
-    warning_count = sum(1 for b in budgets if b["status"] == "warning")
-    on_track_count = sum(1 for b in budgets if b["status"] == "on-track")
+    # --- Summary cards ---
+    total_budget = sum(b["limit"] for b in budgets)
+    total_spent = sum(b["spent"] for b in budgets)
+    remaining = total_budget - total_spent
+    pct = (total_spent / total_budget * 100) if total_budget > 0 else 0.0
+    over_count = sum(1 for b in budgets if b["status_key"] == "over")
 
-    # ---- Trend (last N months) ----
+    if month == f"{date.today().year:04d}-{date.today().month:02d}":
+        days_left = date.today().day
+        days_left = max(1, date.today().day)
+    else:
+        days_left = 1
+    daily = max(0, remaining / days_left) if days_left > 0 else 0
+
+    summary = {
+        "total_budget": round(total_budget, 2),
+        "total_spent": round(total_spent, 2),
+        "remaining": round(max(0, remaining), 2),
+        "pct": round(pct, 1),
+        "over_count": over_count,
+        "daily": round(daily, 2),
+        "days_left": days_left,
+    }
+
+    # --- Trend chart (last N months) ---
     trend = []
     today = date.today()
+    total_limit = sum(BUDGET_LIMITS.values())
     for i in range(BUDGET_TREND_MONTHS - 1, -1, -1):
         m = today.month - i
         y = today.year
         while m < 1:
             m += 12
             y -= 1
-        label = f"{MONTH_LABELS[m]} {y}"
         key = f"{y:04d}-{m:02d}"
-        trend.append({"month": label, "spent": 0.0, "limit": 0.0})
+        trend.append({
+            "label": MONTH_LABELS[m][:3],
+            "budget": round(total_limit, 2),
+            "actual": round(actual_by_month.get(key, 0.0), 2),
+        })
 
-    # Fill trend with actual data.
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT strftime('%Y-%m', date) AS month, COALESCE(SUM(amount), 0.0) AS spent "
-        "FROM expenses WHERE user_id = ? "
-        "GROUP BY month ORDER BY month ASC",
-        (user_id,),
-    )
-    trend_map = {row["month"]: row["spent"] for row in cursor.fetchall()}
-    conn.close()
-    for t in trend:
-        # Reconstruct YYYY-MM from the label's month name + year.
-        parts = t["month"].split()
-        month_num = MONTH_LABELS.index(parts[0])
-        year_num = int(parts[1])
-        key = f"{year_num:04d}-{month_num:02d}"
-        t["spent"] = round(trend_map.get(key, 0.0), 2)
-        t["limit"] = round(sum(b["limit"] for b in budgets if b["name"] in BUDGET_LIMITS or b["name"] in user_budgets) / max(len(budgets), 1), 2)
-
-    # ---- Distribution (donut) ----
+    # --- Distribution (donut) ---
     distribution = [
-        {"name": b["name"], "value": round(b["spent"], 2), "color": b["color"]}
-        for b in budgets if b["spent"] > 0
+        {"name": b["name"], "color": b["color"], "limit": b["limit"]}
+        for b in budgets
     ]
 
-    # ---- Alerts / insights ----
-    alerts = []
-    for b in budgets:
-        if b["status"] == "over":
-            alerts.append({
-                "type": "danger",
-                "icon": "alert-triangle",
-                "title": f"{b['name']} is over budget",
-                "text": f"You've spent ₹{b['spent']:,.2f} against a ₹{b['limit']:,.2f} limit.",
-            })
-        elif b["status"] == "warning":
-            alerts.append({
-                "type": "warning",
-                "icon": "alert-circle",
-                "title": f"{b['name']} is nearing its limit",
-                "text": f"You've used {b['pct']:.0f}% of the ₹{b['limit']:,.2f} budget.",
-            })
-    if not alerts:
-        alerts.append({
-            "type": "success",
-            "icon": "check-circle",
-            "title": "All budgets on track",
-            "text": "Great job staying within your budget limits this period.",
+    # --- Insights (data-driven) ---
+    insights = _compute_budget_insights(budgets, summary, trend)
+
+    # --- Activity timeline ---
+    activity = []
+    for r in activity_rows:
+        activity.append({
+            "id": r["id"],
+            "action": r["action"],
+            "category": r["category"],
+            "description": r["description"],
+            "amount": r["amount"],
+            "created_at": r["created_at"],
+            "time_label": _format_activity_time(r["created_at"]),
         })
 
     return {
-        "summary": {
-            "total_limit": round(total_limit, 2),
-            "total_spent": round(total_spent, 2),
-            "total_remaining": round(total_remaining, 2),
-            "over_count": over_count,
-            "warning_count": warning_count,
-            "on_track_count": on_track_count,
-        },
         "budgets": budgets,
-        "trend": trend,
+        "summary": summary,
+        "monthly_trend": trend,
         "distribution": distribution,
-        "alerts": alerts,
-        "recent_activity": recent_activity,
-        "has_data": total_spent > 0,
+        "insights": insights,
+        "activity": activity,
+        "months": get_budget_months(user_id),
+        "filter_info": {
+            "month": month,
+            "category": category or "",
+            "status": status or "",
+        },
     }
+
+
+def _compute_budget_insights(budgets, summary, trend):
+    """Generate data-driven alert/insight cards for the Budgets page.
+
+    Returns a list of dicts with keys: icon, accent, tone, title, text.
+    """
+    insights = []
+
+    # 1. Over-budget alerts.
+    over = [b for b in budgets if b["status_key"] == "over"]
+    if over:
+        names = ", ".join(b["name"] for b in over[:2])
+        insights.append({
+            "icon": "alert-triangle",
+            "accent": "var(--danger)",
+            "tone": "over",
+            "title": f"{len(over)} budget{'s' if len(over) > 1 else ''} over limit",
+            "text": f"{names} {('have' if len(over) > 1 else 'has')} exceeded their monthly limits. Review upcoming expenses to get back on track.",
+        })
+    else:
+        insights.append({
+            "icon": "shield-check",
+            "accent": "var(--accent)",
+            "tone": "track",
+            "title": "No budgets over limit",
+            "text": "All categories are within their monthly budgets. Great discipline!",
+        })
+
+    # 2. At-risk / warning budgets.
+    warn = [b for b in budgets if b["status_key"] == "warning"]
+    if warn:
+        insights.append({
+            "icon": "trending-up",
+            "accent": "var(--accent-2)",
+            "tone": "warning",
+            "title": "Budgets approaching limits",
+            "text": ", ".join(b["name"] for b in warn[:3]) + " are at risk of exceeding their budgets. Consider trimming spending.",
+        })
+    else:
+        insights.append({
+            "icon": "gauge",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": "All budgets on track",
+            "text": "No category is approaching its limit this month.",
+        })
+
+    # 3. Daily spend pace insight.
+    if summary["total_budget"] > 0:
+        insights.append({
+            "icon": "calendar-clock",
+            "accent": "var(--bar-bills)",
+            "tone": "track",
+            "title": f"Daily pace of ₹{summary['daily']:,.0f}",
+            "text": f"You can spend about ₹{summary['daily']:,.0f} per day for the rest of the month to stay within budget.",
+        })
+
+    # 4. Savings headroom insight.
+    if summary["remaining"] > 0:
+        insights.append({
+            "icon": "piggy-bank",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": f"₹{summary['remaining']:,.0f} of headroom left",
+            "text": f"You have ₹{summary['remaining']:,.0f} unspent across all budgets this month. Saving it could add up quickly.",
+        })
+
+    return insights
+
+
+def _format_activity_time(created_at):
+    """Format an activity timestamp as a short relative label."""
+    if not created_at:
+        return "Recently"
+    try:
+        from datetime import datetime as dt_parse
+        dt = dt_parse.strptime(created_at, "%Y-%m-%d %H:%M:%S")
+    except (ValueError, TypeError):
+        return "Recently"
+    now = date.today()
+    if dt.date() == now:
+        return f"Today · {dt.strftime('%I:%M %p')}"
+    if dt.date() == now - timedelta(days=1):
+        return f"Yesterday · {dt.strftime('%I:%M %p')}"
+    return dt.strftime('%b %d · %I:%M %p')
 
 
 # ================================================================== #
 # Goals module — DB layer                                           #
 # ================================================================== #
 
-def get_user_goals(user_id):
-    """Return all goals for a user, ordered by progress descending.
+def _goal_status(saved, target, status):
+    """Return the effective status key for a goal.
 
-    Returns a list of dicts with id, name, category, target_amount,
-    saved_amount, deadline, status, progress, effective_status, created_at.
-    Empty list if none. Uses parameterized queries — safe from SQL injection.
+    If the goal is explicitly completed or paused, that status is kept.
+    Otherwise, a goal is "completed" when saved >= target, "at-risk" when
+    progress is below 40%, and "on-track" otherwise.
     """
+    if status in ("completed", "paused"):
+        return status
+    if target > 0 and saved >= target:
+        return "completed"
+    pct = (saved / target * 100) if target > 0 else 0
+    if pct < 40:
+        return "at-risk"
+    return "on-track"
+
+
+def get_user_goals(user_id, status=None, category=None, sort="progress-desc"):
+    """Return all goals for a user with computed progress.
+
+    Each goal dict includes id, name, category, target_amount, saved_amount,
+    deadline, status, created_at, updated_at, progress (0-100), and
+    effective_status (the derived status). Supports optional status and
+    category filters and a whitelisted sort key. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    clauses = ["user_id = ?"]
+    params = [user_id]
+
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+
+    where = " AND ".join(clauses)
+    sort_sql = GOAL_SORT_OPTIONS.get(sort, GOAL_SORT_OPTIONS["progress-desc"])
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, user_id, name, category, target_amount, saved_amount, deadline, status, created_at "
-        "FROM goals WHERE user_id = ? "
-        "ORDER BY (saved_amount * 1.0 / target_amount) DESC, id ASC",
-        (user_id,),
+        "SELECT id, user_id, name, category, target_amount, saved_amount, "
+        "deadline, status, created_at, updated_at "
+        f"FROM goals WHERE {where} "
+        f"ORDER BY {sort_sql}",
+        tuple(params),
     )
-    rows = [dict(row) for row in cursor.fetchall()]
+    rows = []
+    for row in cursor.fetchall():
+        g = dict(row)
+        g["progress"] = round((g["saved_amount"] / g["target_amount"] * 100), 1) if g["target_amount"] > 0 else 0.0
+        g["effective_status"] = _goal_status(g["saved_amount"], g["target_amount"], g["status"])
+        rows.append(g)
     conn.close()
-    for g in rows:
-        g["progress"] = round(g["saved_amount"] / g["target_amount"] * 100, 1) if g["target_amount"] > 0 else 0.0
-        g["effective_status"] = g["status"]
-        if g["saved_amount"] >= g["target_amount"] and g["status"] != "paused":
-            g["effective_status"] = "completed"
+
+    # Filter by effective status (computed) after fetching, since the raw
+    # status column may not match the derived status (e.g. saved == target).
+    if status:
+        rows = [g for g in rows if g["effective_status"] == status]
+
     return rows
 
 
@@ -1675,7 +1501,8 @@ def get_goal_by_id(goal_id, user_id):
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT id, user_id, name, category, target_amount, saved_amount, deadline, status, created_at "
+        "SELECT id, user_id, name, category, target_amount, saved_amount, "
+        "deadline, status, created_at, updated_at "
         "FROM goals WHERE id = ? AND user_id = ?",
         (goal_id, user_id),
     )
@@ -1683,10 +1510,8 @@ def get_goal_by_id(goal_id, user_id):
     conn.close()
     if row:
         g = dict(row)
-        g["progress"] = round(g["saved_amount"] / g["target_amount"] * 100, 1) if g["target_amount"] > 0 else 0.0
-        g["effective_status"] = g["status"]
-        if g["saved_amount"] >= g["target_amount"] and g["status"] != "paused":
-            g["effective_status"] = "completed"
+        g["progress"] = round((g["saved_amount"] / g["target_amount"] * 100), 1) if g["target_amount"] > 0 else 0.0
+        g["effective_status"] = _goal_status(g["saved_amount"], g["target_amount"], g["status"])
         return g
     return None
 
@@ -1701,7 +1526,7 @@ def create_goal(user_id, name, category, target_amount, saved_amount, deadline, 
     cursor.execute(
         "INSERT INTO goals (user_id, name, category, target_amount, saved_amount, deadline, status) "
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (user_id, name, category, target_amount, saved_amount, deadline, status),
+        (user_id, name, category, float(target_amount), float(saved_amount), deadline, status),
     )
     goal_id = cursor.lastrowid
     conn.commit()
@@ -1718,10 +1543,10 @@ def update_goal(goal_id, user_id, name, category, target_amount, saved_amount, d
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE goals SET name = ?, category = ?, target_amount = ?, saved_amount = ?, "
-        "deadline = ?, status = ?, updated_at = datetime('now') "
+        "UPDATE goals SET name = ?, category = ?, target_amount = ?, "
+        "saved_amount = ?, deadline = ?, status = ?, updated_at = datetime('now') "
         "WHERE id = ? AND user_id = ?",
-        (name, category, target_amount, saved_amount, deadline, status, goal_id, user_id),
+        (name, category, float(target_amount), float(saved_amount), deadline, status, goal_id, user_id),
     )
     affected = cursor.rowcount
     conn.commit()
@@ -1748,133 +1573,665 @@ def delete_goal(goal_id, user_id):
 
 
 def add_goal_funds(goal_id, user_id, amount):
-    """Add funds to a goal (ownership enforced), capping at the target.
+    """Add funds to a goal's saved_amount.
 
-    Returns the updated goal dict, or None if the goal does not exist or
-    belongs to another user. Uses parameterized queries — safe from SQL
-    injection.
+    The saved amount is capped at the target. If the goal reaches its target,
+    its status is set to "completed". Returns the updated goal dict, or None
+    if the goal does not exist / is not owned by the user. Uses parameterized
+    queries — safe from SQL injection.
     """
     goal = get_goal_by_id(goal_id, user_id)
     if goal is None:
         return None
-    new_saved = min(goal["saved_amount"] + amount, goal["target_amount"])
+
+    new_saved = min(goal["target_amount"], goal["saved_amount"] + float(amount))
+    new_status = "completed" if new_saved >= goal["target_amount"] else goal["status"]
+
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
-        "UPDATE goals SET saved_amount = ?, updated_at = datetime('now') "
+        "UPDATE goals SET saved_amount = ?, status = ?, updated_at = datetime('now') "
         "WHERE id = ? AND user_id = ?",
-        (new_saved, goal_id, user_id),
+        (new_saved, new_status, goal_id, user_id),
     )
     conn.commit()
     conn.close()
+
     return get_goal_by_id(goal_id, user_id)
 
 
 def get_goal_data(user_id, status=None, category=None, sort="progress-desc"):
-    """Return the full Goals dashboard dataset for a user.
+    """Compute the full Goals module data for a user.
 
-    Computes summary cards, goal cards, insights, and recent activity.
-    Supports optional status, category, and sort filters. Uses parameterized
+    Args:
+        user_id: the owning user.
+        status: optional status key filter.
+        category: optional category name filter.
+        sort: whitelisted sort key.
+
+    Returns a dict with:
+      - goals: list of goal dicts (with progress and effective_status)
+      - summary: {total_goals, on_track, completed, total_saved, remaining}
+      - insights: list of {icon, accent, tone, title, text}
+      - activity: list of {id, action, goal, text, time_label}
+      - categories: list of {name, icon, color}
+      - statuses: list of status keys
+      - filter_info: {status, category, sort}
+    """
+    goals = get_user_goals(user_id, status=status, category=category, sort=sort)
+
+    total_goals = len(goals)
+    on_track = sum(1 for g in goals if g["effective_status"] == "on-track")
+    completed = sum(1 for g in goals if g["effective_status"] == "completed")
+    total_saved = round(sum(g["saved_amount"] for g in goals), 2)
+    total_target = round(sum(g["target_amount"] for g in goals), 2)
+    remaining = round(max(0, total_target - total_saved), 2)
+
+    summary = {
+        "total_goals": total_goals,
+        "on_track": on_track,
+        "completed": completed,
+        "total_saved": total_saved,
+        "remaining": remaining,
+    }
+
+    insights = _compute_goal_insights(goals, summary)
+
+    # Activity timeline — derive from the goals table (recently updated first).
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, name, category, saved_amount, target_amount, status, updated_at "
+        "FROM goals WHERE user_id = ? "
+        "ORDER BY updated_at DESC, id DESC LIMIT 8",
+        (user_id,),
+    )
+    activity_rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    activity = []
+    for r in activity_rows:
+        action = "updated"
+        if r["status"] == "completed":
+            action = "completed"
+        elif r["saved_amount"] > 0 and r["saved_amount"] < r["target_amount"]:
+            action = "funded"
+        activity.append({
+            "id": r["id"],
+            "action": action,
+            "goal": r["name"],
+            "text": f"{r['name']} — {r['saved_amount']:,.0f} of {r['target_amount']:,.0f} saved",
+            "time_label": _format_activity_time(r["updated_at"]),
+        })
+
+    categories = [
+        {"name": name, "icon": icon, "color": color}
+        for name, icon, color in GOAL_CATEGORIES
+    ]
+
+    return {
+        "goals": goals,
+        "summary": summary,
+        "insights": insights,
+        "activity": activity,
+        "categories": categories,
+        "statuses": list(GOAL_STATUSES),
+        "filter_info": {
+            "status": status or "",
+            "category": category or "",
+            "sort": sort,
+        },
+    }
+
+
+def _compute_goal_insights(goals, summary):
+    """Generate data-driven insight cards for the Goals page.
+
+    Returns a list of dicts with keys: icon, accent, tone, title, text.
+    """
+    insights = []
+
+    at_risk = [g for g in goals if g["effective_status"] == "at-risk"]
+    completed = [g for g in goals if g["effective_status"] == "completed"]
+
+    if at_risk:
+        names = ", ".join(g["name"] for g in at_risk[:2])
+        insights.append({
+            "icon": "alert-triangle",
+            "accent": "var(--danger)",
+            "tone": "over",
+            "title": f"{len(at_risk)} goal{'s' if len(at_risk) > 1 else ''} at risk",
+            "text": f"{names} {('are' if len(at_risk) > 1 else 'is')} behind schedule. Consider increasing contributions.",
+        })
+    else:
+        insights.append({
+            "icon": "shield-check",
+            "accent": "var(--accent)",
+            "tone": "track",
+            "title": "No goals at risk",
+            "text": "All your goals are progressing well. Keep it up!",
+        })
+
+    if completed:
+        insights.append({
+            "icon": "trophy",
+            "accent": "var(--success)",
+            "tone": "track",
+            "title": f"{len(completed)} goal{'s' if len(completed) > 1 else ''} completed",
+            "text": "Great progress! You've reached your targets. Time to celebrate!",
+        })
+
+    if summary["total_goals"] > 0:
+        pct = round(summary["total_saved"] / (summary["total_saved"] + summary["remaining"]) * 100, 1) if (summary["total_saved"] + summary["remaining"]) > 0 else 0
+        insights.append({
+            "icon": "pie-chart",
+            "accent": "var(--accent-2)",
+            "tone": "warning",
+            "title": f"Overall progress {pct}%",
+            "text": f"You have saved ₹{summary['total_saved']:,.0f} across all goals.",
+        })
+
+    return insights
+
+
+# ================================================================== #
+# Categories module — DB layer                                       #
+# ================================================================== #
+
+def ensure_default_categories(user_id):
+    """Seed the default categories for a user if they have none.
+
+    Also creates rows for any expense category names that do not yet have a
+    category row (migration safety for data created before the categories
+    table existed). Idempotent — never duplicates existing rows.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Distinct category names actually used by this user's expenses.
+    cursor.execute(
+        "SELECT DISTINCT category FROM expenses WHERE user_id = ?",
+        (user_id,),
+    )
+    used_names = {row["category"] for row in cursor.fetchall()}
+
+    # Existing category names for this user.
+    cursor.execute(
+        "SELECT name FROM categories WHERE user_id = ?",
+        (user_id,),
+    )
+    existing = {row["name"] for row in cursor.fetchall()}
+
+    # Insert defaults + any used-but-missing names.
+    inserts = []
+    for name, desc, icon, color in DEFAULT_CATEGORIES:
+        if name not in existing:
+            inserts.append((user_id, name, desc, icon, color))
+            existing.add(name)
+    for name in used_names:
+        if name not in existing and name not in CATEGORIES:
+            inserts.append((user_id, name, "", "tag", "#6b7280"))
+            existing.add(name)
+
+    cursor.executemany(
+        "INSERT INTO categories (user_id, name, description, icon, color) "
+        "VALUES (?, ?, ?, ?, ?)",
+        inserts,
+    )
+    conn.commit()
+    conn.close()
+
+
+def backfill_categories():
+    """Ensure every existing user has default category rows.
+
+    Called once at app startup after init_db(). Iterates all users and calls
+    ensure_default_categories() for each.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users")
+    user_ids = [row["id"] for row in cursor.fetchall()]
+    conn.close()
+
+    for uid in user_ids:
+        ensure_default_categories(uid)
+
+
+def get_user_categories(user_id):
+    """Return all category rows for a user (no usage stats), ordered by name.
+
+    Used for dropdowns (expense form, transactions filter, merge selects).
+    Returns a list of dicts with id, name, description, icon, color.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, name, description, icon, color, created_at "
+        "FROM categories WHERE user_id = ? "
+        "ORDER BY name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    rows = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def create_category(user_id, name, description, icon, color):
+    """Create a new category for a user and return its id.
+
+    Raises sqlite3.IntegrityError if the name already exists for this user
+    (case-insensitive uniqueness enforced via a case-insensitive EXISTS check
+    before insert). Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO categories (user_id, name, description, icon, color) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, name, description, icon, color),
+        )
+        cat_id = cursor.lastrowid
+        conn.commit()
+        return cat_id
+    finally:
+        conn.close()
+
+
+def get_category_by_id(category_id, user_id):
+    """Return a single category with usage stats, or None if not found/owned.
+
+    The returned dict includes transaction_count, total_spent and
+    avg_expense computed from the user's expenses table. Uses parameterized
     queries — safe from SQL injection.
     """
-    sort_sql = GOAL_SORT_OPTIONS.get(sort, GOAL_SORT_OPTIONS["progress-desc"])
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT c.id, c.user_id, c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.id = ? AND c.user_id = ? "
+        "GROUP BY c.id",
+        (category_id, user_id),
+    )
+    cat = cursor.fetchone()
+    conn.close()
+    if cat:
+        cat = dict(cat)
+        cat["total_spent"] = round(cat["total_spent"], 2)
+        cat["avg_expense"] = round(cat["avg_expense"], 2)
+        return cat
+    return None
 
-    where = "WHERE user_id = ?"
+
+def update_category(category_id, user_id, name, description, icon, color):
+    """Update a category row WHERE id = ? AND user_id = ?.
+
+    If the name changes, existing expenses using the old name are renamed to
+    the new name so historical data stays coherent. Returns True if a row was
+    updated. Raises sqlite3.IntegrityError on duplicate names.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT name FROM categories WHERE id = ? AND user_id = ?",
+            (category_id, user_id),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return False
+
+        old_name = row["name"]
+        cursor.execute(
+            "UPDATE categories SET name = ?, description = ?, icon = ?, color = ? "
+            "WHERE id = ? AND user_id = ?",
+            (name, description, icon, color, category_id, user_id),
+        )
+        affected = cursor.rowcount
+
+        # Keep expenses in sync with a renamed category.
+        if old_name != name:
+            cursor.execute(
+                "UPDATE expenses SET category = ? WHERE user_id = ? AND category = ?",
+                (name, user_id, old_name),
+            )
+            # Also keep the activity log coherent.
+            cursor.execute(
+                "UPDATE activities SET category = ? WHERE user_id = ? AND category = ?",
+                (name, user_id, old_name),
+            )
+
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
+
+
+def delete_category(category_id, user_id, reassign=True):
+    """Delete a category row WHERE id = ? AND user_id = ?.
+
+    When reassign is True (default), any expenses using this category are first
+    reassigned to "Other" so no orphaned expense categories remain. Returns
+    True if a row was deleted, False if no matching row found. Uses
+    parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT name FROM categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        conn.close()
+        return False
+
+    name = row["name"]
+    if reassign:
+        cursor.execute(
+            "UPDATE expenses SET category = 'Other' "
+            "WHERE user_id = ? AND category = ?",
+            (user_id, name),
+        )
+        cursor.execute(
+            "UPDATE activities SET category = 'Other' "
+            "WHERE user_id = ? AND category = ?",
+            (user_id, name),
+        )
+
+    cursor.execute(
+        "DELETE FROM categories WHERE id = ? AND user_id = ?",
+        (category_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def get_categories(user_id, search="", sort="name-asc", page=1, per_page=8):
+    """Fetch paginated categories with usage statistics for a user.
+
+    Returns a dict with items, total, pages, page, per_page, has_prev,
+    has_next. Each item includes transaction_count, total_spent and
+    avg_expense. `search` matches name/description case-insensitively. `sort`
+    is validated against CATEGORY_SORT_OPTIONS. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    sort_sql = CATEGORY_SORT_OPTIONS.get(sort, CATEGORY_SORT_OPTIONS["name-asc"])
+
+    clauses = ["c.user_id = ?"]
     params = [user_id]
-    if status:
-        where += " AND status = ?"
-        params.append(status)
-    if category:
-        where += " AND category = ?"
-        params.append(category)
+    if search:
+        clauses.append("(c.name LIKE ? OR c.description LIKE ?)")
+        like = f"%{search}%"
+        params.append(like)
+        params.append(like)
+    where = "WHERE " + " AND ".join(clauses)
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # ---- Goals (filtered) ----
     cursor.execute(
-        f"SELECT id, user_id, name, category, target_amount, saved_amount, deadline, status, created_at "
-        f"FROM goals {where} ORDER BY {sort_sql}",
+        "SELECT COUNT(DISTINCT c.id) AS total "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        f"{where}",
         tuple(params),
     )
-    goals = [dict(row) for row in cursor.fetchall()]
-    for g in goals:
-        g["progress"] = round(g["saved_amount"] / g["target_amount"] * 100, 1) if g["target_amount"] > 0 else 0.0
-        g["effective_status"] = g["status"]
-        if g["saved_amount"] >= g["target_amount"] and g["status"] != "paused":
-            g["effective_status"] = "completed"
+    total = cursor.fetchone()["total"]
 
-    # ---- Summary ----
-    total_saved = sum(g["saved_amount"] for g in goals)
-    total_target = sum(g["target_amount"] for g in goals)
-    completed = sum(1 for g in goals if g["effective_status"] == "completed")
-    active = sum(1 for g in goals if g["effective_status"] in ("on-track", "at-risk"))
-    paused = sum(1 for g in goals if g["effective_status"] == "paused")
+    if per_page is None or per_page <= 0:
+        per_page = total if total > 0 else 1
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = max(1, min(int(page), pages))
 
-    # ---- Recent activity ----
     cursor.execute(
-        "SELECT id, action, category, description, amount, created_at "
-        "FROM activities WHERE user_id = ? "
-        "ORDER BY created_at DESC, id DESC LIMIT 8",
-        (user_id,),
+        "SELECT c.id, c.user_id, c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        f"{where} "
+        "GROUP BY c.id "
+        f"ORDER BY {sort_sql} "
+        "LIMIT ? OFFSET ?",
+        tuple(params) + (per_page, (page - 1) * per_page),
     )
-    recent_activity = [dict(row) for row in cursor.fetchall()]
-
+    items = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item["total_spent"] = round(item["total_spent"], 2)
+        item["avg_expense"] = round(item["avg_expense"], 2)
+        items.append(item)
     conn.close()
 
-    # ---- Insights ----
-    insights = []
-    if goals:
-        top = max(goals, key=lambda g: g["progress"])
-        insights.append({
-            "icon": "trophy",
-            "accent": "var(--accent)",
-            "title": f"Best progress: {top['name']}",
-            "text": f"You're {top['progress']:.0f}% of the way to your ₹{top['target_amount']:,.2f} goal.",
-        })
-        if completed:
-            insights.append({
-                "icon": "party-popper",
-                "accent": "var(--success)",
-                "title": f"{completed} goal(s) completed",
-                "text": "Congratulations on reaching your savings targets!",
-            })
-        if paused:
-            insights.append({
-                "icon": "pause",
-                "accent": "var(--ink-muted)",
-                "title": f"{paused} goal(s) paused",
-                "text": "Paused goals are not accruing progress right now.",
-            })
+    return {
+        "items": items,
+        "total": total,
+        "pages": pages,
+        "page": page,
+        "per_page": per_page,
+        "has_prev": page > 1,
+        "has_next": page < pages,
+    }
+
+
+def get_category_stats(user_id):
+    """Compute the aggregate statistics for the Categories dashboard.
+
+    Returns a dict with:
+      - total_categories: int
+      - most_used_category: str or None (by transaction count)
+      - highest_spending_category: str or None (by total spent)
+      - unused_categories: int (categories with zero transactions)
+      - total_spent: float (sum of all expenses)
+      - distribution: list of {name, color, total, count, pct} ordered by
+        total descending (only categories with expenses)
+      - conic_gradient: str — CSS conic-gradient() value built from the
+        distribution colors for the donut chart
+      - ranking: list of {id, name, icon, color, total_spent, pct} ordered by
+        total spent descending (all categories, capped at 8)
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # All categories with usage stats.
+    cursor.execute(
+        "SELECT c.id, c.name, c.icon, c.color, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.user_id = ? "
+        "GROUP BY c.id "
+        "ORDER BY total_spent DESC, c.name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    cats = [dict(r) for r in cursor.fetchall()]
+
+    # Grand total spent (all expenses).
+    cursor.execute(
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_spent, "
+        "COUNT(*) AS expense_count FROM expenses WHERE user_id = ?",
+        (user_id,),
+    )
+    grand = dict(cursor.fetchone())
+    conn.close()
+
+    total_categories = len(cats)
+    used = [c for c in cats if c["transaction_count"] > 0]
+    unused_count = total_categories - len(used)
+
+    most_used = max(cats, key=lambda c: c["transaction_count"]) if cats and cats[0]["transaction_count"] > 0 else None
+    if most_used is None:
+        # No category has transactions; fall back to None.
+        most_used = None
     else:
-        insights.append({
-            "icon": "target",
-            "accent": "var(--accent)",
-            "title": "No goals yet",
-            "text": "Create your first savings goal to start tracking progress.",
+        most_used = most_used["name"]
+
+    highest = used[0]["name"] if used else None
+
+    grand_total = grand["total_spent"] or 0.0
+
+    distribution = []
+    for c in used:
+        pct = (c["total_spent"] / grand_total * 100) if grand_total > 0 else 0.0
+        distribution.append({
+            "name": c["name"],
+            "color": c["color"],
+            "total": round(c["total_spent"], 2),
+            "count": c["transaction_count"],
+            "pct": round(pct, 1),
+        })
+
+    # Build a CSS conic-gradient string for the donut chart.
+    if distribution:
+        segments = []
+        cumulative = 0.0
+        for d in distribution:
+            start = cumulative
+            end = cumulative + d["pct"]
+            cumulative = end
+            segments.append(f"{d['color']} {start:.1f}% {end:.1f}%")
+        # Ensure the last segment reaches 100%.
+        if segments:
+            segments[-1] = segments[-1].rsplit(" ", 1)[0] + f" 100%"
+        conic_gradient = f"conic-gradient({', '.join(segments)})"
+    else:
+        conic_gradient = "conic-gradient(var(--border-soft) 0% 100%)"
+
+    ranking = []
+    for c in cats[:8]:
+        pct = (c["total_spent"] / grand_total * 100) if grand_total > 0 else 0.0
+        ranking.append({
+            "id": c["id"],
+            "name": c["name"],
+            "icon": c["icon"],
+            "color": c["color"],
+            "total_spent": round(c["total_spent"], 2),
+            "transaction_count": c["transaction_count"],
+            "pct": round(pct, 1),
         })
 
     return {
-        "summary": {
-            "total_saved": round(total_saved, 2),
-            "total_target": round(total_target, 2),
-            "overall_progress": round((total_saved / total_target * 100), 1) if total_target > 0 else 0.0,
-            "completed": completed,
-            "active": active,
-            "paused": paused,
-        },
-        "goals": goals,
-        "insights": insights,
-        "recent_activity": recent_activity,
-        "has_data": len(goals) > 0,
+        "total_categories": total_categories,
+        "most_used_category": most_used,
+        "highest_spending_category": highest,
+        "unused_categories": unused_count,
+        "total_spent": round(grand_total, 2),
+        "distribution": distribution,
+        "conic_gradient": conic_gradient,
+        "ranking": ranking,
     }
+
+
+def get_categories_export(user_id):
+    """Return flat rows for CSV export: category + usage stats.
+
+    Returns a list of dicts with name, description, icon, color, created_at,
+    transaction_count, total_spent, avg_expense. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT c.name, c.description, c.icon, c.color, c.created_at, "
+        "COALESCE(SUM(e.amount), 0.0) AS total_spent, "
+        "COUNT(e.id) AS transaction_count, "
+        "COALESCE(AVG(e.amount), 0.0) AS avg_expense "
+        "FROM categories c "
+        "LEFT JOIN expenses e ON e.user_id = c.user_id AND e.category = c.name "
+        "WHERE c.user_id = ? "
+        "GROUP BY c.id "
+        "ORDER BY c.name COLLATE NOCASE ASC",
+        (user_id,),
+    )
+    rows = []
+    for row in cursor.fetchall():
+        item = dict(row)
+        item["total_spent"] = round(item["total_spent"], 2)
+        item["avg_expense"] = round(item["avg_expense"], 2)
+        rows.append(item)
+    conn.close()
+    return rows
+
+
+def merge_categories(user_id, source_id, target_id):
+    """Merge source category into target category.
+
+    All expenses (and activity entries) using the source category name are
+    reassigned to the target category name, then the source category row is
+    deleted. Returns True on success, False if either id is invalid or the
+    source == target. Uses parameterized queries — safe from SQL injection.
+    """
+    if source_id == target_id:
+        return False
+
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "SELECT id, name FROM categories WHERE id IN (?, ?) AND user_id = ?",
+        (source_id, target_id, user_id),
+    )
+    rows = {r["id"]: r["name"] for r in cursor.fetchall()}
+    if source_id not in rows or target_id not in rows:
+        conn.close()
+        return False
+
+    source_name = rows[source_id]
+    target_name = rows[target_id]
+
+    cursor.execute(
+        "UPDATE expenses SET category = ? WHERE user_id = ? AND category = ?",
+        (target_name, user_id, source_name),
+    )
+    cursor.execute(
+        "UPDATE activities SET category = ? WHERE user_id = ? AND category = ?",
+        (target_name, user_id, source_name),
+    )
+    cursor.execute(
+        "DELETE FROM categories WHERE id = ? AND user_id = ?",
+        (source_id, user_id),
+    )
+    conn.commit()
+    conn.close()
+    return True
+
+
+def delete_expenses_bulk(user_id, ids):
+    """Delete multiple expenses owned by the user.
+
+    Returns the number of rows actually deleted. Uses parameterized queries —
+    safe from SQL injection.
+    """
+    if not ids:
+        return 0
+    conn = get_db()
+    cursor = conn.cursor()
+    placeholders = ",".join("?" for _ in ids)
+    cursor.execute(
+        f"DELETE FROM expenses WHERE user_id = ? AND id IN ({placeholders})",
+        (user_id, *ids),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected
 
 
 # ================================================================== #
 # Reports module — DB layer                                          #
 # ================================================================== #
-
-REPORT_DEFAULT_MONTHS = 6
 
 REPORT_PAYMENT_LABELS = {
     "card": "Card",
@@ -1885,135 +2242,227 @@ REPORT_PAYMENT_LABELS = {
 }
 
 REPORT_PAYMENT_COLORS = {
-    "card": "var(--bar-bills)",
-    "upi": "var(--bar-health)",
-    "cash": "var(--bar-other)",
-    "bank": "var(--bar-shopping)",
-    "wallet": "var(--bar-entertainment)",
+    "card": "var(--cat-bills-text)",
+    "upi": "var(--cat-health-text)",
+    "cash": "var(--cat-other-text)",
+    "bank": "var(--cat-shopping-text)",
+    "wallet": "var(--cat-entertainment-text)",
 }
 
+REPORT_DEFAULT_MONTHS = 6
 
-def _compute_period_range(months):
-    """Return (start, end) ISO date strings for the last ``months`` months."""
+
+def _build_report_filters(date_from, date_to, category, payment):
+    """Build WHERE-clause fragments and parameter list for report queries.
+
+    Returns (where_clauses, params) where params does NOT include user_id
+    (the caller prepends it). All bound via ``?`` placeholders.
+    """
+    clauses = ["user_id = ?"]
+    params = []
+
+    if date_from:
+        clauses.append("date >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("date <= ?")
+        params.append(date_to)
+    if category:
+        clauses.append("category = ?")
+        params.append(category)
+    if payment:
+        clauses.append("payment_method = ?")
+        params.append(payment)
+
+    return clauses, params
+
+
+def _compute_period_range(months_back):
+    """Return (start_date, end_date) ISO strings for the last N months."""
     today = date.today()
-    end = today
-    start_month = today.month - (months - 1)
-    start_year = today.year
-    while start_month < 1:
-        start_month += 12
-        start_year -= 1
-    start = date(start_year, start_month, 1)
-    return start.isoformat(), end.isoformat()
+    end = today.isoformat()
+    month = today.month - months_back
+    year = today.year
+    while month < 1:
+        month += 12
+        year -= 1
+    from datetime import date as dt_date
+    start = dt_date(year, month, 1).isoformat()
+    return start, end
 
 
 def get_report_data(user_id, date_from=None, date_to=None, category=None,
                     payment=None, months=REPORT_DEFAULT_MONTHS):
-    """Return the full Reports dashboard dataset for a user.
+    """Compute full report data for a user with optional filtering.
 
-    Computes summary cards, monthly trend, category and payment breakdowns,
-    top expenses, monthly summary, and data-driven insight cards. Supports
-    optional date range, category, and payment method filters. Uses
-    parameterized queries — safe from SQL injection.
+    When date_from/date_to are not provided, defaults to the last ``months``
+    months (default 6). Supports optional category and payment method filters.
+
+    Returns a dict with:
+      - summary: {total_spending, total_transactions, avg_monthly,
+                  highest_month_name, highest_month_amount,
+                  largest_expense_amount, largest_expense_desc,
+                  largest_expense_category, potential_savings,
+                  prev_total_spending, prev_total_transactions}
+      - monthly_trend: list of {month, label, amount} for each month
+        in the period (chronological)
+      - prev_monthly_trend: list of {month, label, amount} for the
+        previous period of the same length (for comparison)
+      - category_breakdown: list of {name, color, value} ordered by
+        value descending
+      - payment_breakdown: list of {name, color, value} ordered by
+        value descending
+      - top_expenses: list of {id, date, description, category,
+        payment_method, amount} ordered by amount descending (limit 10)
+      - monthly_summary: list of {month_label, transaction_count,
+        total, average} ordered chronologically
+      - insights: list of {icon, accent, title, text}
+      - filter_info: {date_from, date_to, category, payment}
     """
-    # Build WHERE clause.
-    where = "WHERE user_id = ?"
-    params = [user_id]
-    if date_from:
-        where += " AND date >= ?"
-        params.append(date_from)
-    if date_to:
-        where += " AND date <= ?"
-        params.append(date_to)
-    if category:
-        where += " AND category = ?"
-        params.append(category)
-    if payment:
-        where += " AND payment_method = ?"
-        params.append(payment)
+    # Default date range = last N months.
+    if not date_from and not date_to:
+        date_from, date_to = _compute_period_range(months)
 
-    full_params = tuple(params)
+    clauses, params = _build_report_filters(date_from, date_to, category, payment)
+    where = " AND ".join(clauses)
+    full_params = [user_id] + params
 
     conn = get_db()
     cursor = conn.cursor()
 
-    # ---- Summary ----
+    # ---- Summary cards ----
     cursor.execute(
-        f"SELECT COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count "
-        f"FROM expenses {where}",
-        full_params,
+        "SELECT COALESCE(SUM(amount), 0.0) AS total_spending, "
+        "COUNT(*) AS total_transactions "
+        f"FROM expenses WHERE {where}",
+        tuple(full_params),
     )
-    summary_row = cursor.fetchone()
-    total_spending = summary_row["total"]
-    total_transactions = summary_row["count"]
+    cur_totals = dict(cursor.fetchone())
 
-    # ---- Previous period for comparison ----
+    total_spending = round(cur_totals["total_spending"], 2)
+    total_transactions = cur_totals["total_transactions"]
+
+    # Average monthly spend.
+    cursor.execute(
+        "SELECT COUNT(DISTINCT strftime('%Y-%m', date)) AS month_count "
+        f"FROM expenses WHERE {where}",
+        tuple(full_params),
+    )
+    month_count = max(cursor.fetchone()["month_count"], 1)
+    avg_monthly = round(total_spending / month_count, 2) if month_count else 0.0
+
+    # Highest spending month.
+    cursor.execute(
+        "SELECT strftime('%Y-%m', date) AS month, "
+        "COALESCE(SUM(amount), 0.0) AS total "
+        f"FROM expenses WHERE {where} "
+        "GROUP BY month ORDER BY total DESC LIMIT 1",
+        tuple(full_params),
+    )
+    highest_row = cursor.fetchone()
+    if highest_row and highest_row["total"] > 0:
+        ym = highest_row["month"]
+        parts = ym.split("-")
+        month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        highest_month_name = f"{month_names[int(parts[1])]} {parts[0]}"
+        highest_month_amount = round(highest_row["total"], 2)
+    else:
+        highest_month_name = "—"
+        highest_month_amount = 0.0
+
+    # Largest single expense.
+    cursor.execute(
+        "SELECT amount, description, category "
+        f"FROM expenses WHERE {where} "
+        "ORDER BY amount DESC LIMIT 1",
+        tuple(full_params),
+    )
+    largest = cursor.fetchone()
+    largest_expense = dict(largest) if largest else None
+    largest_expense_amount = round(largest_expense["amount"], 2) if largest_expense else 0.0
+    largest_expense_desc = largest_expense["description"] or "—" if largest_expense else "—"
+    largest_expense_category = largest_expense["category"] if largest_expense else "—"
+
+    # Potential savings: 11% of total (static heuristic).
+    potential_savings = round(total_spending * 0.11, 2)
+
+    # ---- Previous period (for comparison) ----
     prev_from, prev_to = _compute_prev_period(date_from, date_to, months)
+    prev_clauses, prev_params = _build_report_filters(prev_from, prev_to, category, payment)
+    prev_where = " AND ".join(prev_clauses)
+    prev_full_params = [user_id] + prev_params
+
     cursor.execute(
         "SELECT COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count "
-        "FROM expenses WHERE user_id = ? AND date >= ? AND date <= ?",
-        (user_id, prev_from, prev_to),
+        f"FROM expenses WHERE {prev_where}",
+        tuple(prev_full_params),
     )
-    prev_row = cursor.fetchone()
-    prev_total_spending = prev_row["total"]
-    prev_total_transactions = prev_row["count"]
+    prev_totals = dict(cursor.fetchone())
+    prev_total_spending = round(prev_totals["total"], 2)
+    prev_total_transactions = prev_totals["count"]
 
-    # ---- Monthly trend (current period) ----
+    # ---- Monthly trend (current period, chronological) ----
     cursor.execute(
         "SELECT strftime('%Y-%m', date) AS month, "
-        "COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count "
-        f"FROM expenses {where} "
+        "COALESCE(SUM(amount), 0.0) AS amount "
+        f"FROM expenses WHERE {where} "
         "GROUP BY month ORDER BY month ASC",
-        full_params,
+        tuple(full_params),
     )
     monthly_trend = []
+    month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
     for row in cursor.fetchall():
         parts = row["month"].split("-")
-        label = f"{MONTH_LABELS[int(parts[1])]} {parts[0]}"
+        label = f"{month_names[int(parts[1])]} {parts[0]}"
         monthly_trend.append({
-            "month": label,
-            "total": round(row["total"], 2),
-            "count": row["count"],
+            "month": row["month"],
+            "label": label,
+            "amount": round(row["amount"], 2),
         })
 
-    # ---- Previous monthly trend ----
+    # ---- Previous period monthly trend ----
     cursor.execute(
         "SELECT strftime('%Y-%m', date) AS month, "
-        "COALESCE(SUM(amount), 0.0) AS total, COUNT(*) AS count "
-        "FROM expenses WHERE user_id = ? AND date >= ? AND date <= ? "
+        "COALESCE(SUM(amount), 0.0) AS amount "
+        f"FROM expenses WHERE {prev_where} "
         "GROUP BY month ORDER BY month ASC",
-        (user_id, prev_from, prev_to),
+        tuple(prev_full_params),
     )
     prev_monthly_trend = []
     for row in cursor.fetchall():
         parts = row["month"].split("-")
-        label = f"{MONTH_LABELS[int(parts[1])]} {parts[0]}"
+        label = f"{month_names[int(parts[1])]} {parts[0]}"
         prev_monthly_trend.append({
-            "month": label,
-            "total": round(row["total"], 2),
-            "count": row["count"],
+            "month": row["month"],
+            "label": label,
+            "amount": round(row["amount"], 2),
         })
 
-    # ---- Category breakdown ----
+    # ---- Category breakdown (with colors from categories table) ----
     cursor.execute(
-        "SELECT category, COALESCE(SUM(amount), 0.0) AS value "
-        f"FROM expenses {where} "
-        "GROUP BY category ORDER BY value DESC",
-        full_params,
+        "SELECT e.category AS name, "
+        "COALESCE((SELECT color FROM categories WHERE user_id = e.user_id AND name = e.category), '#6b7280') AS color, "
+        "COALESCE(SUM(e.amount), 0.0) AS value "
+        f"FROM expenses e WHERE {where} "
+        "GROUP BY e.category ORDER BY value DESC",
+        tuple(full_params),
     )
     category_breakdown = []
     for row in cursor.fetchall():
         category_breakdown.append({
-            "name": row["category"],
-            "color": "var(--bar-other)",
+            "name": row["name"],
+            "color": row["color"],
             "value": round(row["value"], 2),
         })
 
     # ---- Payment method breakdown ----
     cursor.execute(
         "SELECT payment_method, COALESCE(SUM(amount), 0.0) AS value "
-        f"FROM expenses {where} "
+        f"FROM expenses WHERE {where} "
         "GROUP BY payment_method ORDER BY value DESC",
-        full_params,
+        tuple(full_params),
     )
     payment_breakdown = []
     for row in cursor.fetchall():
@@ -2027,9 +2476,9 @@ def get_report_data(user_id, date_from=None, date_to=None, category=None,
     # ---- Top expenses (by amount, limit 10) ----
     cursor.execute(
         "SELECT id, date, description, category, payment_method, amount "
-        f"FROM expenses {where} "
+        f"FROM expenses WHERE {where} "
         "ORDER BY amount DESC LIMIT 10",
-        full_params,
+        tuple(full_params),
     )
     top_expenses = []
     for row in cursor.fetchall():
@@ -2048,9 +2497,9 @@ def get_report_data(user_id, date_from=None, date_to=None, category=None,
         "COUNT(*) AS transaction_count, "
         "COALESCE(SUM(amount), 0.0) AS total, "
         "COALESCE(AVG(amount), 0.0) AS average "
-        f"FROM expenses {where} "
+        f"FROM expenses WHERE {where} "
         "GROUP BY month ORDER BY month ASC",
-        full_params,
+        tuple(full_params),
     )
     monthly_summary = []
     for row in cursor.fetchall():
@@ -2480,85 +2929,10 @@ def delete_user_account(user_id):
     cursor = conn.cursor()
 
     # Delete child rows first (foreign key order).
-    for table in ("user_settings", "sessions", "expenses", "activities", "budgets", "goals", "categories"):
+    for table in ("user_settings", "expenses", "activities", "budgets", "goals", "categories"):
         cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
 
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-# ================================================================== #
-# Sessions module — DB layer                                        #
-# ================================================================== #
-
-def create_session(user_id, token, user_agent="", ip_address=""):
-    """Record a new authenticated session for a user.
-
-    Returns the new session id. Uses parameterized queries — safe from
-    SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO sessions (user_id, token, user_agent, ip_address) "
-        "VALUES (?, ?, ?, ?)",
-        (user_id, token, user_agent, ip_address),
-    )
-    session_id = cursor.lastrowid
-    conn.commit()
-    conn.close()
-    return session_id
-
-
-def get_user_sessions(user_id):
-    """Return all active sessions for a user, newest first.
-
-    Returns a list of dicts with id, user_id, token, user_agent, ip_address,
-    created_at, last_seen. Empty list if none. Uses parameterized queries.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT id, user_id, token, user_agent, ip_address, created_at, last_seen "
-        "FROM sessions WHERE user_id = ? "
-        "ORDER BY last_seen DESC, id DESC",
-        (user_id,),
-    )
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return rows
-
-
-def revoke_session(user_id, session_id):
-    """Revoke (delete) a session row, scoped to the owning user.
-
-    Returns True if a row was deleted, False if no matching row found.
-    Uses parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM sessions WHERE id = ? AND user_id = ?",
-        (session_id, user_id),
-    )
-    affected = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return affected > 0
-
-
-def delete_session_by_token(token):
-    """Delete a session row by its token (used on logout).
-
-    Returns True if a row was deleted, False if no matching row found.
-    Uses parameterized queries — safe from SQL injection.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM sessions WHERE token = ?", (token,))
     affected = cursor.rowcount
     conn.commit()
     conn.close()
@@ -2615,3 +2989,347 @@ def get_recent_activity(user_id, limit=8, category=None):
         )
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
+    return rows
+
+
+# ================================================================== #
+# Help & Support module — DB layer                                   #
+# ================================================================== #
+
+HELP_TICKET_STATUSES = ("open", "in_progress", "resolved", "closed")
+HELP_TICKET_PRIORITIES = ("low", "normal", "high", "urgent")
+HELP_TOPICS = (
+    "Getting Started", "Expenses", "Budgets", "Goals",
+    "Reports", "Settings", "Security", "Data & Privacy", "Other",
+)
+
+
+def seed_help_content():
+    """Insert default help articles and FAQs if the tables are empty.
+
+    Idempotent — only inserts when the support_articles / support_faqs
+    tables contain no rows. Uses parameterized queries.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM support_articles")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return
+
+    articles = [
+        ("Getting Started", "Welcome to Spendly", "Your quick-start guide to the app.",
+         "Welcome to Spendly! Add your first expense by going to the Expenses page, set a monthly budget, and create a savings goal. Use the sidebar to navigate and the theme switch to personalise the look."),
+        ("Expenses", "How to add an expense", "Record a purchase in seconds.",
+         "Open Expenses, click Add Expense, enter the amount, pick a category, add an optional note and payment method, choose a date, and save. It instantly appears in your ledger, dashboard, and reports."),
+        ("Budgets", "Creating a monthly budget", "Set limits and stay on track.",
+         "Open the Budgets page, click Add Budget, select a category, set your monthly limit, and save. Spendly tracks usage and alerts you when you approach or exceed your limit."),
+        ("Goals", "Setting savings goals", "Track progress toward a goal.",
+         "Visit the Goals page and create a goal with a target amount and deadline. Add funds as you save; Spendly shows your progress with a progress bar and celebrates at 100%."),
+        ("Reports", "Understanding your reports", "Read spending trends and insights.",
+         "The Reports page analyses your spending by category, payment method, and month. Use the filters to narrow the range and review the data-driven insights for saving opportunities."),
+        ("Settings", "Managing your preferences", "Currency, language, and appearance.",
+         "Open Settings to manage your profile, currency, date format, language, week start, theme, and accent colour. Changes apply across the entire app instantly."),
+        ("Security", "Two-factor authentication", "Add an extra layer of protection.",
+         "Under Settings → Security, toggle on Two-Factor Authentication. Each sign-in then requires a one-time code from your authenticator app."),
+        ("Data & Privacy", "Exporting your data", "Download a copy of your data.",
+         "Go to Settings → Export & Backup to download your transactions as CSV or create a full backup. Your data is yours, always."),
+    ]
+    cursor.executemany(
+        "INSERT INTO support_articles (topic, title, excerpt, body, is_public, article_order) "
+        "VALUES (?, ?, ?, ?, 1, ?)",
+        [(a[0], a[1], a[2], a[3], idx) for idx, a in enumerate(articles)],
+    )
+
+    faqs = [
+        ("Getting Started", "How do I add my first expense?", "Go to Expenses, click Add Expense, enter the amount, category, date, and optional note, then save."),
+        ("Budgets", "How do I create a monthly budget?", "Open Budgets, click Add Budget, select a category, set your monthly limit, and save."),
+        ("Goals", "Can I set savings goals?", "Yes — visit Goals, create a goal with a target and deadline, and add funds as you save."),
+        ("Reports", "How do I export my financial data?", "Go to Settings → Export & Backup and download your transactions as CSV or a full backup."),
+        ("Security", "How do I enable two-factor authentication?", "Go to Settings → Security and toggle on Two-Factor Authentication."),
+        ("Settings", "Can I change my currency or language?", "Yes — open Settings → Preferences to change currency, date format, language, and week start."),
+        ("Settings", "How do I switch between light and dark mode?", "Use the theme switcher in the top navigation bar to pick Light, Dark, or System."),
+        ("Data & Privacy", "Is my financial data secure and private?", "Yes. Spendly uses hashed passwords and never sells your data. See our Privacy Policy and Terms for details."),
+    ]
+    cursor.executemany(
+        "INSERT INTO support_faqs (topic, question, answer, faq_order) VALUES (?, ?, ?, ?)",
+        [(f[0], f[1], f[2], idx) for idx, f in enumerate(faqs)],
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_help_articles(topic=None, search=None):
+    """Return public help articles, optionally filtered by topic/search.
+
+    Articles are ordered by article_order then id. Returns a list of dicts.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = ["is_public = 1"]
+    params = []
+    if topic and topic != "all":
+        clauses.append("topic = ?")
+        params.append(topic)
+    if search:
+        clauses.append("(title LIKE ? OR excerpt LIKE ? OR body LIKE ? OR topic LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like, like])
+    where = " AND ".join(clauses)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT id, topic, title, excerpt, body, article_order, created_at "
+        f"FROM support_articles WHERE {where} "
+        "ORDER BY article_order ASC, id ASC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_help_article(article_id):
+    """Return a single public help article by id, or None if not found/private."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, topic, title, excerpt, body, article_order, created_at "
+        "FROM support_articles WHERE id = ? AND is_public = 1",
+        (article_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_help_faqs(topic=None, search=None):
+    """Return FAQ rows, optionally filtered by topic/search.
+
+    Ordered by faq_order then id. Returns a list of dicts.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = []
+    params = []
+    if topic and topic != "all":
+        clauses.append("topic = ?")
+        params.append(topic)
+    if search:
+        clauses.append("(question LIKE ? OR answer LIKE ? OR topic LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT id, topic, question, answer, faq_order, created_at "
+        f"FROM support_faqs{where} "
+        "ORDER BY faq_order ASC, id ASC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def search_help(q):
+    """Search across public articles and FAQs for a keyword.
+
+    Returns a dict with `articles` and `faqs` matching lists.
+    """
+    return {
+        "articles": get_help_articles(search=q),
+        "faqs": get_help_faqs(search=q),
+    }
+
+
+def create_support_ticket(user_id, subject, category, message, priority="normal"):
+    """Create a new support ticket and return its id.
+
+    Generates a unique ticket number (SLY-XXXX). The initial user message is
+    stored in the ticket_messages table as the first conversation entry.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    # Generate a unique ticket number.
+    cursor.execute("SELECT COUNT(*) FROM support_tickets")
+    count = cursor.fetchone()[0]
+    ticket_no = f"SLY-{1000 + count + 1}"
+
+    cursor.execute(
+        "INSERT INTO support_tickets (user_id, ticket_no, subject, category, priority, message, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'open')",
+        (user_id, ticket_no, subject, category, priority, message),
+    )
+    ticket_id = cursor.lastrowid
+
+    # Store the initial message as a conversation entry.
+    cursor.execute(
+        "INSERT INTO ticket_messages (ticket_id, user_id, author, body, is_staff) "
+        "VALUES (?, ?, 'You', ?, 0)",
+        (ticket_id, user_id, message),
+    )
+    conn.commit()
+    conn.close()
+    return ticket_id
+
+
+def get_user_tickets(user_id, status=None):
+    """Return all support tickets for a user, newest first.
+
+    Each ticket dict includes message_count (computed). Optionally filters by
+    status. Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = ["t.user_id = ?"]
+    params = [user_id]
+    if status and status != "all":
+        clauses.append("t.status = ?")
+        params.append(status)
+    where = " AND ".join(clauses)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT t.id, t.user_id, t.ticket_no, t.subject, t.category, t.priority, "
+        "t.message, t.status, t.created_at, t.updated_at, "
+        "(SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id = t.id) AS message_count "
+        f"FROM support_tickets t WHERE {where} "
+        "ORDER BY t.updated_at DESC, t.id DESC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_ticket_by_id(ticket_id, user_id):
+    """Return a single ticket scoped to the user, or None if not found/owned."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, ticket_no, subject, category, priority, "
+        "message, status, created_at, updated_at "
+        "FROM support_tickets WHERE id = ? AND user_id = ?",
+        (ticket_id, user_id),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_ticket_messages(ticket_id, user_id):
+    """Return conversation messages for a ticket, owned by the user.
+
+    Returns a list of dicts ordered oldest first.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, ticket_id, user_id, author, body, is_staff, created_at "
+        "FROM ticket_messages WHERE ticket_id = ? AND user_id = ? "
+        "ORDER BY created_at ASC, id ASC",
+        (ticket_id, user_id),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_ticket_message(ticket_id, user_id, body):
+    """Append a user message to a ticket conversation.
+
+    Returns the new message id, or None if the ticket is not owned by the user
+    or is closed. Updates the ticket's updated_at timestamp. Uses
+    parameterized queries — safe from SQL injection.
+    """
+    ticket = get_ticket_by_id(ticket_id, user_id)
+    if ticket is None or ticket["status"] == "closed":
+        return None
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO ticket_messages (ticket_id, user_id, author, body, is_staff) "
+        "VALUES (?, ?, 'You', ?, 0)",
+        (ticket_id, user_id, body),
+    )
+    msg_id = cursor.lastrowid
+    cursor.execute(
+        "UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?",
+        (ticket_id,),
+    )
+    conn.commit()
+    conn.close()
+    return msg_id
+
+
+def update_ticket_status(ticket_id, user_id, status):
+    """Update a ticket's status (scoped to the user).
+
+    Only accepts statuses in HELP_TICKET_STATUSES. Returns True on success,
+    False if the ticket is not found/owned or the status is invalid.
+    """
+    if status not in HELP_TICKET_STATUSES:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE support_tickets SET status = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (status, ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def update_ticket_priority(ticket_id, user_id, priority):
+    """Update a ticket's priority (scoped to the user)."""
+    if priority not in HELP_TICKET_PRIORITIES:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE support_tickets SET priority = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (priority, ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def close_ticket(ticket_id, user_id):
+    """Close a ticket (scoped to the user)."""
+    return update_ticket_status(ticket_id, user_id, "closed")
+
+
+def delete_ticket(ticket_id, user_id):
+    """Delete a ticket and its messages (scoped to the user).
+
+    Returns True if a row was deleted, False if not found/owned.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM ticket_messages WHERE ticket_id = ? AND user_id = ?", (ticket_id, user_id))
+    cursor.execute(
+        "DELETE FROM support_tickets WHERE id = ? AND user_id = ?",
+        (ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def get_support_stats(user_id):
+    """Return support ticket statistics for the user's dashboard view."""
+    tickets = get_user_tickets(user_id)
+    return {
+        "total": len(tickets),
+        "open": sum(1 for t in tickets if t["status"] == "open"),
+        "in_progress": sum(1 for t in tickets if t["status"] == "in_progress"),
+        "resolved": sum(1 for t in tickets if t["status"] == "resolved"),
+        "closed": sum(1 for t in tickets if t["status"] == "closed"),
+    }
