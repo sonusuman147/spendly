@@ -277,6 +277,58 @@ def init_db():
         )
     """)
 
+    # --- Help & Support module tables ---
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_tickets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            ticket_no TEXT UNIQUE NOT NULL,
+            subject TEXT NOT NULL,
+            category TEXT NOT NULL,
+            priority TEXT NOT NULL DEFAULT 'normal',
+            message TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ticket_messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ticket_id INTEGER NOT NULL REFERENCES support_tickets(id),
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            author TEXT NOT NULL,
+            body TEXT NOT NULL,
+            is_staff INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_articles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            title TEXT NOT NULL,
+            excerpt TEXT NOT NULL,
+            body TEXT NOT NULL,
+            is_public INTEGER NOT NULL DEFAULT 1,
+            article_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS support_faqs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            topic TEXT NOT NULL,
+            question TEXT NOT NULL,
+            answer TEXT NOT NULL,
+            faq_order INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
     # Add google_id column if not already present — safe on repeated runs
     try:
         cursor.execute("ALTER TABLE users ADD COLUMN google_id TEXT")
@@ -2938,3 +2990,346 @@ def get_recent_activity(user_id, limit=8, category=None):
     rows = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return rows
+
+
+# ================================================================== #
+# Help & Support module — DB layer                                   #
+# ================================================================== #
+
+HELP_TICKET_STATUSES = ("open", "in_progress", "resolved", "closed")
+HELP_TICKET_PRIORITIES = ("low", "normal", "high", "urgent")
+HELP_TOPICS = (
+    "Getting Started", "Expenses", "Budgets", "Goals",
+    "Reports", "Settings", "Security", "Data & Privacy", "Other",
+)
+
+
+def seed_help_content():
+    """Insert default help articles and FAQs if the tables are empty.
+
+    Idempotent — only inserts when the support_articles / support_faqs
+    tables contain no rows. Uses parameterized queries.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM support_articles")
+    if cursor.fetchone()[0] > 0:
+        conn.close()
+        return
+
+    articles = [
+        ("Getting Started", "Welcome to Spendly", "Your quick-start guide to the app.",
+         "Welcome to Spendly! Add your first expense by going to the Expenses page, set a monthly budget, and create a savings goal. Use the sidebar to navigate and the theme switch to personalise the look."),
+        ("Expenses", "How to add an expense", "Record a purchase in seconds.",
+         "Open Expenses, click Add Expense, enter the amount, pick a category, add an optional note and payment method, choose a date, and save. It instantly appears in your ledger, dashboard, and reports."),
+        ("Budgets", "Creating a monthly budget", "Set limits and stay on track.",
+         "Open the Budgets page, click Add Budget, select a category, set your monthly limit, and save. Spendly tracks usage and alerts you when you approach or exceed your limit."),
+        ("Goals", "Setting savings goals", "Track progress toward a goal.",
+         "Visit the Goals page and create a goal with a target amount and deadline. Add funds as you save; Spendly shows your progress with a progress bar and celebrates at 100%."),
+        ("Reports", "Understanding your reports", "Read spending trends and insights.",
+         "The Reports page analyses your spending by category, payment method, and month. Use the filters to narrow the range and review the data-driven insights for saving opportunities."),
+        ("Settings", "Managing your preferences", "Currency, language, and appearance.",
+         "Open Settings to manage your profile, currency, date format, language, week start, theme, and accent colour. Changes apply across the entire app instantly."),
+        ("Security", "Two-factor authentication", "Add an extra layer of protection.",
+         "Under Settings → Security, toggle on Two-Factor Authentication. Each sign-in then requires a one-time code from your authenticator app."),
+        ("Data & Privacy", "Exporting your data", "Download a copy of your data.",
+         "Go to Settings → Export & Backup to download your transactions as CSV or create a full backup. Your data is yours, always."),
+    ]
+    cursor.executemany(
+        "INSERT INTO support_articles (topic, title, excerpt, body, is_public, article_order) "
+        "VALUES (?, ?, ?, ?, 1, ?)",
+        [(a[0], a[1], a[2], a[3], idx) for idx, a in enumerate(articles)],
+    )
+
+    faqs = [
+        ("Getting Started", "How do I add my first expense?", "Go to Expenses, click Add Expense, enter the amount, category, date, and optional note, then save."),
+        ("Budgets", "How do I create a monthly budget?", "Open Budgets, click Add Budget, select a category, set your monthly limit, and save."),
+        ("Goals", "Can I set savings goals?", "Yes — visit Goals, create a goal with a target and deadline, and add funds as you save."),
+        ("Reports", "How do I export my financial data?", "Go to Settings → Export & Backup and download your transactions as CSV or a full backup."),
+        ("Security", "How do I enable two-factor authentication?", "Go to Settings → Security and toggle on Two-Factor Authentication."),
+        ("Settings", "Can I change my currency or language?", "Yes — open Settings → Preferences to change currency, date format, language, and week start."),
+        ("Settings", "How do I switch between light and dark mode?", "Use the theme switcher in the top navigation bar to pick Light, Dark, or System."),
+        ("Data & Privacy", "Is my financial data secure and private?", "Yes. Spendly uses hashed passwords and never sells your data. See our Privacy Policy and Terms for details."),
+    ]
+    cursor.executemany(
+        "INSERT INTO support_faqs (topic, question, answer, faq_order) VALUES (?, ?, ?, ?)",
+        [(f[0], f[1], f[2], idx) for idx, f in enumerate(faqs)],
+    )
+
+    conn.commit()
+    conn.close()
+
+
+def get_help_articles(topic=None, search=None):
+    """Return public help articles, optionally filtered by topic/search.
+
+    Articles are ordered by article_order then id. Returns a list of dicts.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = ["is_public = 1"]
+    params = []
+    if topic and topic != "all":
+        clauses.append("topic = ?")
+        params.append(topic)
+    if search:
+        clauses.append("(title LIKE ? OR excerpt LIKE ? OR body LIKE ? OR topic LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like, like])
+    where = " AND ".join(clauses)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT id, topic, title, excerpt, body, article_order, created_at "
+        f"FROM support_articles WHERE {where} "
+        "ORDER BY article_order ASC, id ASC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_help_article(article_id):
+    """Return a single public help article by id, or None if not found/private."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, topic, title, excerpt, body, article_order, created_at "
+        "FROM support_articles WHERE id = ? AND is_public = 1",
+        (article_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_help_faqs(topic=None, search=None):
+    """Return FAQ rows, optionally filtered by topic/search.
+
+    Ordered by faq_order then id. Returns a list of dicts.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = []
+    params = []
+    if topic and topic != "all":
+        clauses.append("topic = ?")
+        params.append(topic)
+    if search:
+        clauses.append("(question LIKE ? OR answer LIKE ? OR topic LIKE ?)")
+        like = f"%{search}%"
+        params.extend([like, like, like])
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"SELECT id, topic, question, answer, faq_order, created_at "
+        f"FROM support_faqs{where} "
+        "ORDER BY faq_order ASC, id ASC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def search_help(q):
+    """Search across public articles and FAQs for a keyword.
+
+    Returns a dict with `articles` and `faqs` matching lists.
+    """
+    return {
+        "articles": get_help_articles(search=q),
+        "faqs": get_help_faqs(search=q),
+    }
+
+
+def create_support_ticket(user_id, subject, category, message, priority="normal"):
+    """Create a new support ticket and return its id.
+
+    Generates a unique ticket number (SLY-XXXX). The initial user message is
+    stored in the ticket_messages table as the first conversation entry.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    # Generate a unique ticket number.
+    cursor.execute("SELECT COUNT(*) FROM support_tickets")
+    count = cursor.fetchone()[0]
+    ticket_no = f"SLY-{1000 + count + 1}"
+
+    cursor.execute(
+        "INSERT INTO support_tickets (user_id, ticket_no, subject, category, priority, message, status) "
+        "VALUES (?, ?, ?, ?, ?, ?, 'open')",
+        (user_id, ticket_no, subject, category, priority, message),
+    )
+    ticket_id = cursor.lastrowid
+
+    # Store the initial message as a conversation entry.
+    cursor.execute(
+        "INSERT INTO ticket_messages (ticket_id, user_id, author, body, is_staff) "
+        "VALUES (?, ?, 'You', ?, 0)",
+        (ticket_id, user_id, message),
+    )
+    conn.commit()
+    conn.close()
+    return ticket_id
+
+
+def get_user_tickets(user_id, status=None):
+    """Return all support tickets for a user, newest first.
+
+    Each ticket dict includes message_count (computed). Optionally filters by
+    status. Uses parameterized queries — safe from SQL injection.
+    """
+    clauses = ["t.user_id = ?"]
+    params = [user_id]
+    if status and status != "all":
+        clauses.append("t.status = ?")
+        params.append(status)
+    where = " AND ".join(clauses)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT t.id, t.user_id, t.ticket_no, t.subject, t.category, t.priority, "
+        "t.message, t.status, t.created_at, t.updated_at, "
+        "(SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id = t.id) AS message_count "
+        f"FROM support_tickets t WHERE {where} "
+        "ORDER BY t.updated_at DESC, t.id DESC",
+        tuple(params),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_ticket_by_id(ticket_id, user_id):
+    """Return a single ticket scoped to the user, or None if not found/owned."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, user_id, ticket_no, subject, category, priority, "
+        "message, status, created_at, updated_at "
+        "FROM support_tickets WHERE id = ? AND user_id = ?",
+        (ticket_id, user_id),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_ticket_messages(ticket_id, user_id):
+    """Return conversation messages for a ticket, owned by the user.
+
+    Returns a list of dicts ordered oldest first.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id, ticket_id, user_id, author, body, is_staff, created_at "
+        "FROM ticket_messages WHERE ticket_id = ? AND user_id = ? "
+        "ORDER BY created_at ASC, id ASC",
+        (ticket_id, user_id),
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def add_ticket_message(ticket_id, user_id, body):
+    """Append a user message to a ticket conversation.
+
+    Returns the new message id, or None if the ticket is not owned by the user
+    or is closed. Updates the ticket's updated_at timestamp. Uses
+    parameterized queries — safe from SQL injection.
+    """
+    ticket = get_ticket_by_id(ticket_id, user_id)
+    if ticket is None or ticket["status"] == "closed":
+        return None
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO ticket_messages (ticket_id, user_id, author, body, is_staff) "
+        "VALUES (?, ?, 'You', ?, 0)",
+        (ticket_id, user_id, body),
+    )
+    msg_id = cursor.lastrowid
+    cursor.execute(
+        "UPDATE support_tickets SET updated_at = datetime('now') WHERE id = ?",
+        (ticket_id,),
+    )
+    conn.commit()
+    conn.close()
+    return msg_id
+
+
+def update_ticket_status(ticket_id, user_id, status):
+    """Update a ticket's status (scoped to the user).
+
+    Only accepts statuses in HELP_TICKET_STATUSES. Returns True on success,
+    False if the ticket is not found/owned or the status is invalid.
+    """
+    if status not in HELP_TICKET_STATUSES:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE support_tickets SET status = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (status, ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def update_ticket_priority(ticket_id, user_id, priority):
+    """Update a ticket's priority (scoped to the user)."""
+    if priority not in HELP_TICKET_PRIORITIES:
+        return False
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE support_tickets SET priority = ?, updated_at = datetime('now') "
+        "WHERE id = ? AND user_id = ?",
+        (priority, ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def close_ticket(ticket_id, user_id):
+    """Close a ticket (scoped to the user)."""
+    return update_ticket_status(ticket_id, user_id, "closed")
+
+
+def delete_ticket(ticket_id, user_id):
+    """Delete a ticket and its messages (scoped to the user).
+
+    Returns True if a row was deleted, False if not found/owned.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM ticket_messages WHERE ticket_id = ? AND user_id = ?", (ticket_id, user_id))
+    cursor.execute(
+        "DELETE FROM support_tickets WHERE id = ? AND user_id = ?",
+        (ticket_id, user_id),
+    )
+    affected = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return affected > 0
+
+
+def get_support_stats(user_id):
+    """Return support ticket statistics for the user's dashboard view."""
+    tickets = get_user_tickets(user_id)
+    return {
+        "total": len(tickets),
+        "open": sum(1 for t in tickets if t["status"] == "open"),
+        "in_progress": sum(1 for t in tickets if t["status"] == "in_progress"),
+        "resolved": sum(1 for t in tickets if t["status"] == "resolved"),
+        "closed": sum(1 for t in tickets if t["status"] == "closed"),
+    }
