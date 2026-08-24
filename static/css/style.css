@@ -199,6 +199,78 @@ body:has(#theme-dark:checked) {
     gap: 0.4rem;
 }
 
+/* ------------------------------------------------------------------ */
+/* Accent colour overrides — driven by the user's persisted setting     */
+/* ------------------------------------------------------------------ */
+
+/* Blue accent */
+body[data-accent="blue"] {
+    --accent: #2563eb;
+    --accent-strong: #1d4ed8;
+    --accent-light: #eff6ff;
+    --accent-2: #7c3aed;
+    --accent-2-light: #f5f3ff;
+}
+body[data-accent="blue"]:has(#theme-dark:checked),
+body[data-accent="blue"]:has(#theme-system:checked) {
+    --accent: #3b82f6;
+    --accent-strong: #60a5fa;
+    --accent-light: #1e3a8a;
+    --accent-2: #a78bfa;
+    --accent-2-light: #312e81;
+}
+
+/* Purple accent */
+body[data-accent="purple"] {
+    --accent: #7c3aed;
+    --accent-strong: #6d28d9;
+    --accent-light: #f5f3ff;
+    --accent-2: #db2777;
+    --accent-2-light: #fdf2f8;
+}
+body[data-accent="purple"]:has(#theme-dark:checked),
+body[data-accent="purple"]:has(#theme-system:checked) {
+    --accent: #8b5cf6;
+    --accent-strong: #a78bfa;
+    --accent-light: #312e81;
+    --accent-2: #ec4899;
+    --accent-2-light: #831843;
+}
+
+/* Amber accent */
+body[data-accent="amber"] {
+    --accent: #d97706;
+    --accent-strong: #b45309;
+    --accent-light: #fffbeb;
+    --accent-2: #1a472a;
+    --accent-2-light: #e8f0eb;
+}
+body[data-accent="amber"]:has(#theme-dark:checked),
+body[data-accent="amber"]:has(#theme-system:checked) {
+    --accent: #f59e0b;
+    --accent-strong: #fbbf24;
+    --accent-light: #78350f;
+    --accent-2: #34c377;
+    --accent-2-light: #122a1e;
+}
+
+/* Rose accent */
+body[data-accent="rose"] {
+    --accent: #db2777;
+    --accent-strong: #be185d;
+    --accent-light: #fdf2f8;
+    --accent-2: #1a472a;
+    --accent-2-light: #e8f0eb;
+}
+body[data-accent="rose"]:has(#theme-dark:checked),
+body[data-accent="rose"]:has(#theme-system:checked) {
+    --accent: #ec4899;
+    --accent-strong: #f472b6;
+    --accent-light: #831843;
+    --accent-2: #34c377;
+    --accent-2-light: #122a1e;
+}
+
 .navbar .theme-field {
     flex-direction: row;
     align-items: center;

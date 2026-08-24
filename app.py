@@ -80,11 +80,17 @@ update_category as db_update_category,
     SETTINGS_ACCENT_COLORS,
     SETTINGS_DENSITIES,
     DEFAULT_USER_SETTINGS,
+# Sessions module
+    create_session as db_create_session,
+    get_user_sessions as db_get_user_sessions,
+    revoke_session as db_revoke_session,
+    delete_session_by_token as db_delete_session_by_token,
 )
 
 # Python standard library
 import csv
 import io
+import secrets
 from datetime import datetime as dt_datetime
 
 load_dotenv()
@@ -112,6 +118,24 @@ with app.app_context():
     # Ensure every user (including pre-existing ones) has default category
     # rows so the Categories module works for all accounts.
     db_backfill_categories()
+
+
+@app.context_processor
+def inject_user_settings():
+    """Inject the logged-in user's persisted settings into every template.
+
+    This makes the user's theme and accent colour available to base.html so
+    the app shell can apply them consistently across all pages. Returns an
+    empty dict when not authenticated.
+    """
+    user_id = session.get("user_id")
+    if not user_id:
+        return {}
+    try:
+        settings = db_get_user_settings(user_id)
+        return {"user_settings": settings}
+    except Exception:
+        return {}
 
 
 
@@ -198,6 +222,14 @@ def login():
         # Success — start session and redirect
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
+        # Record this authenticated session for the Active Sessions view.
+        session["session_token"] = _new_session_token()
+        db_create_session(
+            user["id"],
+            session["session_token"],
+            user_agent=request.headers.get("User-Agent", "")[:200],
+            ip_address=request.remote_addr or "",
+        )
         flash("Welcome back!", "success")
         return redirect(url_for("profile"))
 
@@ -242,6 +274,13 @@ def google_callback():
         # Existing Google user — login
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
+        session["session_token"] = _new_session_token()
+        db_create_session(
+            user["id"],
+            session["session_token"],
+            user_agent=request.headers.get("User-Agent", "")[:200],
+            ip_address=request.remote_addr or "",
+        )
         flash("Welcome back!", "success")
         return redirect(url_for("landing"))
 
@@ -286,17 +325,16 @@ def privacy():
     return render_template("privacy.html")
 
 
-@app.route("/help")
-def help():
-    """Render the Help & Support page (requires authentication)."""
-    redirect_resp = login_required()
-    if redirect_resp:
-        return redirect_resp
-    return render_template("help.html")
+
 
 
 @app.route("/logout")
 def logout():
+    # Delete the server-side session record so the Active Sessions list
+    # reflects the real state.
+    token = session.get("session_token")
+    if token:
+        db_delete_session_by_token(token)
     session.clear()
     flash("You have been logged out.", "success")
     return redirect(url_for("landing"))
@@ -2182,10 +2220,16 @@ def settings():
 
     user_settings = db_get_user_settings(session["user_id"])
 
+    # Load the user's real authenticated sessions for the Active Sessions view.
+    sessions = db_get_user_sessions(session["user_id"])
+    current_token = session.get("session_token")
+
     return render_template(
         "settings.html",
         user=user,
         settings=user_settings,
+        sessions=sessions,
+        current_session_token=current_token,
         currencies=SETTINGS_CURRENCIES,
         date_formats=SETTINGS_DATE_FORMATS,
         languages=SETTINGS_LANGUAGES,
@@ -2260,6 +2304,43 @@ def settings_save():
     db_update_user_settings(user_id, **settings_updates)
 
     flash("Settings saved successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/revoke", methods=["POST"])
+def settings_revoke_session():
+    """Revoke (log out) an individual session, scoped to the owning user.
+
+    The session id is taken from the form and the delete is scoped to the
+    logged-in user's id — preventing IDOR / cross-user session revocation.
+    If the user revokes their own current session, they are logged out.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    raw_id = request.form.get("session_id", "").strip()
+    try:
+        session_id = int(raw_id)
+    except (TypeError, ValueError):
+        flash("Invalid session.", "error")
+        return redirect(url_for("settings"))
+
+    revoked = db_revoke_session(user_id, session_id)
+    if not revoked:
+        flash("Session not found or already revoked.", "error")
+        return redirect(url_for("settings"))
+
+    # If the revoked session is the current one, log the user out.
+    remaining = db_get_user_sessions(user_id)
+    current_token = session.get("session_token")
+    if current_token and not any(s["token"] == current_token for s in remaining):
+        session.clear()
+        flash("Your session was revoked. Please sign in again.", "success")
+        return redirect(url_for("login"))
+
+    flash("Session revoked successfully.", "success")
     return redirect(url_for("settings"))
 
 
