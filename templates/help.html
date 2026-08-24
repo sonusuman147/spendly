@@ -1,0 +1,320 @@
+{% extends "base.html" %}
+{% block title %}Help & Support — Spendly{% endblock %}
+{% block page_title %}Help & Support{% endblock %}
+{% block breadcrumb %}<span>Home</span><span class="app-breadcrumb-sep">/</span><span class="app-breadcrumb-current">Help & Support</span>{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ url_for('static', filename='css/help.css') }}">{% endblock %}
+
+{% block content %}
+<section class="help-section">
+  <!-- Header -->
+  <div class="help-header">
+    <div class="help-header-copy">
+      <h1 class="help-title">How can we help?</h1>
+      <p class="help-subtitle">Search our guides, browse popular topics, or get in touch with our support team.</p>
+    </div>
+    <div class="help-header-actions">
+      <button type="button" class="btn-help-primary" data-help-contact-open>
+        <i data-lucide="headset" class="help-btn-icon"></i>Contact Support
+      </button>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}{% for category, message in messages %}<div class="auth-{{ category }}">{{ message }}</div>{% endfor %}{% endif %}
+  {% endwith %}
+
+  <!-- Search Bar -->
+  <div class="help-search-wrap">
+    <div class="help-search">
+      <i data-lucide="search" class="help-search-icon"></i>
+      <input type="search" class="help-search-input" placeholder="Search articles, features, and guides..." aria-label="Search help articles" data-help-search autocomplete="off">
+      <kbd class="help-search-kbd">/</kbd>
+    </div>
+    <div class="help-topic-chips" role="group" aria-label="Filter help topics">
+      <button type="button" class="help-chip is-active" data-help-topic="all"><i data-lucide="layout-grid" class="help-chip-icon"></i>All Topics</button>
+      <button type="button" class="help-chip" data-help-topic="getting-started"><i data-lucide="rocket" class="help-chip-icon"></i>Getting Started</button>
+      <button type="button" class="help-chip" data-help-topic="expenses"><i data-lucide="wallet" class="help-chip-icon"></i>Expenses</button>
+      <button type="button" class="help-chip" data-help-topic="budgets"><i data-lucide="piggy-bank" class="help-chip-icon"></i>Budgets</button>
+      <button type="button" class="help-chip" data-help-topic="goals"><i data-lucide="target" class="help-chip-icon"></i>Goals</button>
+      <button type="button" class="help-chip" data-help-topic="reports"><i data-lucide="bar-chart-3" class="help-chip-icon"></i>Reports</button>
+      <button type="button" class="help-chip" data-help-topic="settings"><i data-lucide="settings" class="help-chip-icon"></i>Settings</button>
+      <button type="button" class="help-chip" data-help-topic="security"><i data-lucide="shield" class="help-chip-icon"></i>Security</button>
+      <button type="button" class="help-chip" data-help-topic="privacy"><i data-lucide="eye-off" class="help-chip-icon"></i>Data & Privacy</button>
+    </div>
+  </div>
+
+  <!-- Popular Searches -->
+  <div class="help-popular" data-help-popular>
+    <span class="help-popular-label">Popular:</span>
+    <button type="button" class="help-popular-tag" data-help-search-tag>Add an expense</button>
+    <button type="button" class="help-popular-tag" data-help-search-tag>Create a budget</button>
+    <button type="button" class="help-popular-tag" data-help-search-tag>Set a savings goal</button>
+    <button type="button" class="help-popular-tag" data-help-search-tag>Export data</button>
+    <button type="button" class="help-popular-tag" data-help-search-tag>Two-factor auth</button>
+  </div>
+
+  <!-- Loading / Empty states -->
+  <div class="help-feedback" data-help-loading hidden><div class="help-spinner" aria-hidden="true"></div><p>Searching the knowledge base...</p></div>
+  <div class="help-feedback help-empty" data-help-empty hidden>
+    <div class="help-empty-icon"><i data-lucide="search-x" class="help-empty-icon-svg"></i></div>
+    <h3 class="help-empty-title">No results found</h3>
+    <p class="help-empty-text">We couldn't find anything matching your search. Try different keywords or browse a topic below.</p>
+    <button type="button" class="btn-help-ghost" data-help-clear-search><i data-lucide="rotate-ccw" class="help-btn-icon"></i>Clear search</button>
+  </div>
+
+  <!-- Help Topic Cards -->
+  <div class="help-cards-grid" data-help-cards>
+    <a href="#faq" class="help-card" data-help-topic-match="getting-started" data-search-text="get started start onboarding welcome first time signup account create">
+      <div class="help-card-icon" style="--card-accent: var(--accent);"><i data-lucide="rocket"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Getting Started</h2><p class="help-card-desc">Set up your account, add your first expense, and learn the Spendly basics.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">12 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="expenses" data-search-text="expense add record log track spend purchase transaction income">
+      <div class="help-card-icon" style="--card-accent: var(--bar-food);"><i data-lucide="wallet"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Expenses</h2><p class="help-card-desc">Add, edit, organise, and understand your everyday spending.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">18 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="budgets" data-search-text="budget limit plan monthly spend cap alerts overspend">
+      <div class="help-card-icon" style="--card-accent: var(--accent-2);"><i data-lucide="piggy-bank"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Budgets</h2><p class="help-card-desc">Create monthly budgets, set limits, and stay on top of your spending.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">14 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="goals" data-search-text="goal target savings save money milestone emergency fund">
+      <div class="help-card-icon" style="--card-accent: var(--bar-shopping);"><i data-lucide="target"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Goals</h2><p class="help-card-desc">Set savings targets, track progress, and reach your financial milestones.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">9 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="reports" data-search-text="report analyse analyze chart graph trend insight summary export">
+      <div class="help-card-icon" style="--card-accent: var(--bar-bills);"><i data-lucide="bar-chart-3"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Reports</h2><p class="help-card-desc">Explore spending insights, trends, and downloadable reports.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">11 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="settings" data-search-text="settings preference currency language appearance theme profile">
+      <div class="help-card-icon" style="--card-accent: var(--bar-health);"><i data-lucide="settings"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Settings</h2><p class="help-card-desc">Manage your profile, preferences, currency, and appearance.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">10 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="security" data-search-text="security password two-factor 2fa authenticate session login safe">
+      <div class="help-card-icon" style="--card-accent: var(--bar-food);"><i data-lucide="shield"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Security</h2><p class="help-card-desc">Keep your account safe with strong passwords and two-factor auth.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">8 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+    <a href="#faq" class="help-card" data-help-topic-match="privacy" data-search-text="privacy data export download delete backup private personal information gdpr">
+      <div class="help-card-icon" style="--card-accent: var(--bar-entertainment);"><i data-lucide="eye-off"></i></div>
+      <div class="help-card-body"><h2 class="help-card-title">Data & Privacy</h2><p class="help-card-desc">Export, back up, or delete your data — and understand our privacy practices.</p></div>
+      <div class="help-card-meta"><span class="help-card-tag">7 articles</span><i data-lucide="arrow-right" class="help-card-arrow"></i></div>
+    </a>
+  </div>
+
+  <!-- FAQ Section -->
+  <div class="help-block" id="faq">
+    <div class="help-block-head">
+      <div class="help-block-heading">
+        <i data-lucide="message-circle-question" class="help-block-icon"></i>
+        <div><h2 class="help-block-title">Frequently Asked Questions</h2><p class="help-block-sub">Quick answers to the questions we hear most often.</p></div>
+      </div>
+    </div>
+    <div class="help-faq">
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">How do I add my first expense?</span></summary>
+        <div class="help-faq-a"><p>Go to <strong>Expenses</strong> in the sidebar and click <strong>Add Expense</strong>. Enter the amount, pick a category, add an optional note and payment method, then choose a date. Hit <strong>Save</strong> and it will instantly appear in your ledger, dashboard, and reports.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">How do I create a monthly budget?</span></summary>
+        <div class="help-faq-a"><p>Open the <strong>Budgets</strong> page, click <strong>Add Budget</strong>, select a category, set your monthly limit, and save. Spendly will track your usage and alert you when you approach or exceed your limit.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">Can I set savings goals?</span></summary>
+        <div class="help-faq-a"><p>Absolutely! Visit the <strong>Goals</strong> page and create a goal with a target amount and deadline. You can add funds manually as you save, and Spendly will show your progress with a progress bar.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">How do I export my financial data?</span></summary>
+        <div class="help-faq-a"><p>Go to <strong>Settings → Export & Backup</strong>. You can download your transactions as a <strong>CSV</strong> or create a full backup of all your Spendly data. Your privacy matters — your data is yours, always.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">How do I enable two-factor authentication?</span></summary>
+        <div class="help-faq-a"><p>Head to <strong>Settings → Security</strong> and toggle on <strong>Two-Factor Authentication</strong>. Each time you sign in you'll enter a one-time code from your authenticator app for an extra layer of protection.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">Can I change my currency or language?</span></summary>
+        <div class="help-faq-a"><p>Yes — open <strong>Settings → Preferences</strong> to change your currency, date format, language, and week start day. These preferences apply across the entire app instantly.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">How do I switch between light and dark mode?</span></summary>
+        <div class="help-faq-a"><p>Use the theme switcher in the top navigation bar. You can pick <strong>Light</strong>, <strong>Dark</strong>, or <strong>System</strong> (which follows your device's preference). Your choice is saved automatically.</p></div>
+      </details>
+      <details class="help-faq-item">
+        <summary class="help-faq-q"><span class="help-faq-q-icon"><i data-lucide="plus"></i></span><span class="help-faq-q-text">Is my financial data secure and private?</span></summary>
+        <div class="help-faq-a"><p>Yes. Spendly uses secure, hashed passwords, and your data is never sold or shared with third parties. You control everything under <strong>Settings → Data & Privacy</strong>. See our <a href="{{ url_for('privacy') }}" class="help-inline-link">Privacy Policy</a> and <a href="{{ url_for('terms') }}" class="help-inline-link">Terms & Conditions</a>.</p></div>
+      </details>
+    </div>
+  </div>
+
+  <!-- Contact Support -->
+  <div class="help-block" id="contact">
+    <div class="help-contact-card">
+      <div class="help-contact-icon"><i data-lucide="messages-square" class="help-contact-icon-svg"></i></div>
+      <div class="help-contact-copy">
+        <h2 class="help-contact-title">Still need help?</h2>
+        <p class="help-contact-text">Our support team typically replies within 24 hours. We're here to help you make the most of Spendly.</p>
+      </div>
+      <button type="button" class="btn-help-primary" data-help-contact-open><i data-lucide="mail" class="help-btn-icon"></i>Contact Support</button>
+    </div>
+  </div>
+
+  <!-- My Support Requests -->
+  <div class="help-block" id="requests">
+    <div class="help-block-head">
+      <div class="help-block-heading">
+        <i data-lucide="ticket" class="help-block-icon"></i>
+        <div><h2 class="help-block-title">My Support Requests</h2><p class="help-block-sub">Track the status of tickets you've submitted to our team.</p></div>
+      </div>
+      <button type="button" class="btn-help-ghost" data-help-new-ticket><i data-lucide="plus" class="help-btn-icon"></i>New Request</button>
+    </div>
+    <div class="help-tickets">
+      <div class="help-ticket" data-help-ticket>
+        <div class="help-ticket-icon" style="--ticket-accent: var(--accent);"><i data-lucide="wallet"></i></div>
+        <div class="help-ticket-body">
+          <div class="help-ticket-top"><h3 class="help-ticket-title">Can't see my imported transactions</h3><span class="help-ticket-status help-ticket-status-open"><i data-lucide="clock" class="help-ticket-status-icon"></i>In Progress</span></div>
+          <p class="help-ticket-desc">#SLY-1042 · Submitted 18 Aug 2026 · Expenses · Priya from our team is looking into this.</p>
+        </div>
+        <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
+      </div>
+      <div class="help-ticket" data-help-ticket>
+        <div class="help-ticket-icon" style="--ticket-accent: var(--accent-2);"><i data-lucide="piggy-bank"></i></div>
+        <div class="help-ticket-body">
+          <div class="help-ticket-top"><h3 class="help-ticket-title">Budget alert threshold not updating</h3><span class="help-ticket-status help-ticket-status-resolved"><i data-lucide="check-circle" class="help-ticket-status-icon"></i>Resolved</span></div>
+          <p class="help-ticket-desc">#SLY-1017 · Submitted 12 Aug 2026 · Budgets · Resolved by our team on 14 Aug.</p>
+        </div>
+        <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
+      </div>
+      <div class="help-ticket" data-help-ticket>
+        <div class="help-ticket-icon" style="--ticket-accent: var(--bar-bills);"><i data-lucide="shield"></i></div>
+        <div class="help-ticket-body">
+          <div class="help-ticket-top"><h3 class="help-ticket-title">Two-factor code not receiving</h3><span class="help-ticket-status help-ticket-status-closed"><i data-lucide="x-circle" class="help-ticket-status-icon"></i>Closed</span></div>
+          <p class="help-ticket-desc">#SLY-0989 · Submitted 2 Aug 2026 · Security · Closed — resolved via email.</p>
+        </div>
+        <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Troubleshooting -->
+  <div class="help-block" id="troubleshooting">
+    <div class="help-block-head">
+      <div class="help-block-heading">
+        <i data-lucide="wrench" class="help-block-icon"></i>
+        <div><h2 class="help-block-title">Common Troubleshooting</h2><p class="help-block-sub">Simple fixes for issues you might run into.</p></div>
+      </div>
+    </div>
+    <div class="help-troubleshoot-grid">
+      <div class="help-troubleshoot-item">
+        <div class="help-troubleshoot-icon" style="--ts-accent: var(--bar-bills);"><i data-lucide="rotate-ccw"></i></div>
+        <div><h3 class="help-troubleshoot-title">Page not loading</h3><p class="help-troubleshoot-text">Try refreshing the page, clearing your browser cache, or disabling browser extensions that may block the app.</p></div>
+      </div>
+      <div class="help-troubleshoot-item">
+        <div class="help-troubleshoot-icon" style="--ts-accent: var(--bar-food);"><i data-lucide="file-warning"></i></div>
+        <div><h3 class="help-troubleshoot-title">Data not saving</h3><p class="help-troubleshoot-text">Check your internet connection and make sure you're signed in. Log out and back in, then try saving again.</p></div>
+      </div>
+      <div class="help-troubleshoot-item">
+        <div class="help-troubleshoot-icon" style="--ts-accent: var(--accent-2);"><i data-lucide="smartphone"></i></div>
+        <div><h3 class="help-troubleshoot-title">Mobile layout issues</h3><p class="help-troubleshoot-text">Ensure your browser is up to date. On phones, landscape mode gives the most space for the dashboard and tables.</p></div>
+      </div>
+      <div class="help-troubleshoot-item">
+        <div class="help-troubleshoot-icon" style="--ts-accent: var(--bar-health);"><i data-lucide="key-round"></i></div>
+        <div><h3 class="help-troubleshoot-title">Can't sign in</h3><p class="help-troubleshoot-text">Double-check your email and password, or use the "Forgot password" link to reset your credentials securely.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Status + Resources -->
+  <div class="help-bottom-grid">
+    <div class="help-status">
+      <div class="help-status-head">
+        <div class="help-status-heading">
+          <i data-lucide="activity" class="help-status-icon"></i>
+          <div><h2 class="help-status-title">System Status</h2><p class="help-status-sub">Live status of Spendly services.</p></div>
+        </div>
+        <span class="help-status-pill help-status-pill-operational"><span class="help-status-dot"></span>All Systems Operational</span>
+      </div>
+      <div class="help-status-list">
+        <div class="help-status-row"><span class="help-status-service"><span class="help-status-service-dot help-status-service-dot-ok"></span><span>Web App & Dashboard</span></span><span class="help-status-state ok">Operational</span></div>
+        <div class="help-status-row"><span class="help-status-service"><span class="help-status-service-dot help-status-service-dot-ok"></span><span>API & Data Sync</span></span><span class="help-status-state ok">Operational</span></div>
+        <div class="help-status-row"><span class="help-status-service"><span class="help-status-service-dot help-status-service-dot-ok"></span><span>Reports & Exports</span></span><span class="help-status-state ok">Operational</span></div>
+        <div class="help-status-row"><span class="help-status-service"><span class="help-status-service-dot help-status-service-dot-ok"></span><span>Support & Notifications</span></span><span class="help-status-state ok">Operational</span></div>
+      </div>
+      <p class="help-status-note">Last checked: just now · <button type="button" class="help-status-check" data-help-status-refresh>Refresh status</button></p>
+    </div>
+
+    <div class="help-resources">
+      <div class="help-resources-head">
+        <div class="help-resources-heading">
+          <i data-lucide="book-open" class="help-status-icon"></i>
+          <div><h2 class="help-status-title">Useful Resources</h2><p class="help-status-sub">Guides, tips, and official documents.</p></div>
+        </div>
+      </div>
+      <div class="help-resources-list">
+        <a href="{{ url_for('reports') }}" class="help-resource-link"><i data-lucide="bar-chart-3" class="help-resource-icon"></i><span class="help-resource-copy"><span class="help-resource-title">Understanding your Reports</span><span class="help-resource-desc">Learn how to read spending trends and insights.</span></span><i data-lucide="arrow-right" class="help-resource-arrow"></i></a>
+        <a href="{{ url_for('budgets') }}" class="help-resource-link"><i data-lucide="piggy-bank" class="help-resource-icon"></i><span class="help-resource-copy"><span class="help-resource-title">Budgeting Best Practices</span><span class="help-resource-desc">Set realistic limits and crush your savings goals.</span></span><i data-lucide="arrow-right" class="help-resource-arrow"></i></a>
+        <a href="{{ url_for('privacy') }}" class="help-resource-link"><i data-lucide="shield-check" class="help-resource-icon"></i><span class="help-resource-copy"><span class="help-resource-title">Privacy Policy</span><span class="help-resource-desc">How Spendly handles your data.</span></span><i data-lucide="arrow-right" class="help-resource-arrow"></i></a>
+        <a href="{{ url_for('terms') }}" class="help-resource-link"><i data-lucide="file-text" class="help-resource-icon"></i><span class="help-resource-copy"><span class="help-resource-title">Terms & Conditions</span><span class="help-resource-desc">The official terms of using Spendly.</span></span><i data-lucide="arrow-right" class="help-resource-arrow"></i></a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Contact Modal -->
+  <div class="txn-modal help-modal" data-help-contact-modal hidden>
+    <div class="txn-modal-backdrop" data-help-modal-close></div>
+    <div class="txn-modal-panel">
+      <div class="txn-modal-head"><h3 class="txn-modal-title">Contact Support</h3><button type="button" class="txn-modal-close" data-help-modal-close aria-label="Close"><i data-lucide="x"></i></button></div>
+      <div class="txn-modal-body">
+        <form id="helpContactForm" data-help-contact-form novalidate>
+          <label class="help-form-group"><span class="help-form-label">Topic</span>
+            <select name="topic" class="help-form-select" required>
+              <option value="">Select a topic...</option>
+              <option value="getting-started">Getting Started</option><option value="expenses">Expenses</option><option value="budgets">Budgets</option>
+              <option value="goals">Goals</option><option value="reports">Reports</option><option value="settings">Settings</option>
+              <option value="security">Security</option><option value="privacy">Data & Privacy</option><option value="other">Something else</option>
+            </select>
+          </label>
+          <label class="help-form-group"><span class="help-form-label">Subject</span>
+            <input type="text" name="subject" class="help-form-input" placeholder="Brief summary of your issue" required maxlength="120">
+          </label>
+          <label class="help-form-group"><span class="help-form-label">Message</span>
+            <textarea name="message" class="help-form-textarea" rows="5" placeholder="Tell us as much detail as possible..." required maxlength="2000"></textarea>
+            <span class="help-form-hint"><span data-help-char-count>0</span>/2000 characters</span>
+          </label>
+          <div class="help-form-error" data-help-form-error hidden><i data-lucide="alert-circle" class="help-form-error-icon"></i><span data-help-form-error-text>Please fill in all required fields.</span></div>
+          <div class="help-form-actions">
+            <button type="button" class="btn-help-ghost" data-help-modal-close><i data-lucide="x" class="help-btn-icon"></i>Cancel</button>
+            <button type="submit" class="btn-help-primary"><i data-lucide="send" class="help-btn-icon"></i>Send Message</button>
+          </div>
+        </form>
+        <div class="help-form-success" data-help-form-success hidden>
+          <div class="help-form-success-icon"><i data-lucide="check-circle"></i></div>
+          <h3 class="help-form-success-title">Message sent!</h3>
+          <p class="help-form-success-text">Thanks for reaching out. Our support team will get back to you within 24 hours. A confirmation has been added to your support requests.</p>
+          <button type="button" class="btn-help-ghost" data-help-modal-close>Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ticket Modal -->
+  <div class="txn-modal help-modal" data-help-ticket-modal hidden>
+    <div class="txn-modal-backdrop" data-help-modal-close></div>
+    <div class="txn-modal-panel">
+      <div class="txn-modal-head"><h3 class="txn-modal-title" data-help-ticket-modal-title>Support Request</h3><button type="button" class="txn-modal-close" data-help-modal-close aria-label="Close"><i data-lucide="x"></i></button></div>
+      <div class="txn-modal-body"><div class="help-ticket-detail" data-help-ticket-detail></div></div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="report-toast" data-help-toast hidden><i data-lucide="check-circle" class="report-toast-icon"></i><span class="report-toast-text" data-help-toast-text>Action completed</span></div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/help.js') }}"></script>
+<script>lucide.createIcons();</script>
+{% endblock %}

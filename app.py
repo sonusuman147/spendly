@@ -286,6 +286,15 @@ def privacy():
     return render_template("privacy.html")
 
 
+@app.route("/help")
+def help():
+    """Render the Help & Support page (requires authentication)."""
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+    return render_template("help.html")
+
+
 @app.route("/logout")
 def logout():
     session.clear()
