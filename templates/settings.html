@@ -823,33 +823,36 @@
             </div>
             <div class="txn-modal-body">
                 <div class="settings-session-list">
-                    {% if sessions %}
-                        {% for s in sessions %}
-                        <div class="settings-session-item">
-                            <div class="settings-session-icon"><i data-lucide="monitor" class="settings-icon-sm"></i></div>
-                            <div class="settings-session-body">
-                                <h4 class="settings-session-name">{{ s.user_agent or 'Unknown device' }}</h4>
-                                <p class="settings-session-meta">
-                                    {% if s.ip_address %}IP: {{ s.ip_address }} · {% endif %}
-                                    Last seen {{ s.last_seen }}
-                                </p>
-                            </div>
-                            {% if s.token == current_session_token %}
-                            <span class="settings-session-current">This device</span>
-                            {% else %}
-                            <form method="POST" action="{{ url_for('settings_revoke_session') }}" class="settings-session-revoke-form">
-                                <input type="hidden" name="session_id" value="{{ s.id }}">
-                                <button type="submit" class="btn-settings-ghost btn-settings-ghost-sm">
-                                    <i data-lucide="log-out" class="settings-icon-sm"></i>
-                                    Revoke
-                                </button>
-                            </form>
-                            {% endif %}
+                    <div class="settings-session-item">
+                        <div class="settings-session-icon"><i data-lucide="monitor" class="settings-icon-sm"></i></div>
+                        <div class="settings-session-body">
+                            <h4 class="settings-session-name">Chrome on Windows</h4>
+                            <p class="settings-session-meta">Current session · New Delhi, India · 2 hours ago</p>
                         </div>
-                        {% endfor %}
-                    {% else %}
-                        <p class="settings-session-empty">No active sessions found.</p>
-                    {% endif %}
+                        <span class="settings-session-current">This device</span>
+                    </div>
+                    <div class="settings-session-item">
+                        <div class="settings-session-icon"><i data-lucide="smartphone" class="settings-icon-sm"></i></div>
+                        <div class="settings-session-body">
+                            <h4 class="settings-session-name">Spendly App on iPhone</h4>
+                            <p class="settings-session-meta">Mumbai, India · 3 days ago</p>
+                        </div>
+                        <button type="button" class="btn-settings-ghost btn-settings-ghost-sm" data-revoke-session>
+                            <i data-lucide="log-out" class="settings-icon-sm"></i>
+                            Revoke
+                        </button>
+                    </div>
+                    <div class="settings-session-item">
+                        <div class="settings-session-icon"><i data-lucide="laptop" class="settings-icon-sm"></i></div>
+                        <div class="settings-session-body">
+                            <h4 class="settings-session-name">Firefox on MacBook</h4>
+                            <p class="settings-session-meta">Bengaluru, India · 1 week ago</p>
+                        </div>
+                        <button type="button" class="btn-settings-ghost btn-settings-ghost-sm" data-revoke-session>
+                            <i data-lucide="log-out" class="settings-icon-sm"></i>
+                            Revoke
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
