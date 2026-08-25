@@ -1256,6 +1256,13 @@
     white-space: nowrap;
 }
 
+.settings-session-empty {
+    padding: 1.5rem 0.5rem;
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: 0.875rem;
+}
+
 /* ------------------------------------------------------------------ */
 /* Toast                                                               */
 /* ------------------------------------------------------------------ */

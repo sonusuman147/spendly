@@ -398,3 +398,351 @@ class TestDeleteAccount:
         resp = client.post("/settings/delete-account")
         assert resp.status_code == 302
         assert "/login" in resp.headers["Location"]
+# =================================================================== #
+# Session tracking helpers (unit)                                     #
+# =================================================================== #
+
+class TestSessionTrackingHelpers:
+    """Verify the user_sessions helpers (create/list/revoke/cleanup)."""
+
+    def test_create_and_list_user_sessions(self, db):
+        db.create_user_session(1, "token-aaa", ip_address="10.0.0.1", user_agent="Chrome/Windows")
+        db.create_user_session(1, "token-bbb", ip_address="10.0.0.2", user_agent="Firefox/Mac")
+        rows = db.get_user_sessions(1)
+        assert len(rows) == 2
+        # Newest first (higher id).
+        assert rows[0]["token"] == "token-bbb"
+        assert rows[0]["revoked"] == 0
+
+    def test_sessions_are_scoped_to_user(self, db):
+        db.create_user("Second", "second@example.com")
+        db.create_user_session(1, "token-aaa")
+        db.create_user_session(2, "token-bbb")
+        rows = db.get_user_sessions(1)
+        assert len(rows) == 1
+        assert rows[0]["token"] == "token-aaa"
+
+    def test_get_session_by_token(self, db):
+        db.create_user_session(1, "token-aaa")
+        row = db.get_user_session_by_token("token-aaa")
+        assert row is not None and row["user_id"] == 1 and row["revoked"] == 0
+        assert db.get_user_session_by_token("nope") is None
+
+    def test_revoke_user_session_only_owner(self, db):
+        db.create_user("Second", "second@example.com")
+        sid_own = db.create_user_session(1, "token-own")
+        sid_other = db.create_user_session(2, "token-other")
+        # Cannot revoke another user's session even with a valid id.
+        assert db.revoke_user_session(1, sid_other) is False
+        assert db.get_user_session_by_token("token-other")["revoked"] == 0
+        # Owner can revoke their own.
+        assert db.revoke_user_session(1, sid_own) is True
+        assert db.get_user_session_by_token("token-own")["revoked"] == 1
+
+    def test_revoke_user_session_by_token(self, db):
+        db.create_user_session(1, "token-aaa")
+        assert db.revoke_user_session_by_token("token-aaa") is True
+        assert db.get_user_session_by_token("token-aaa")["revoked"] == 1
+
+    def test_delete_account_cleans_sessions(self, db):
+        db.create_user_session(1, "token-aaa")
+        db.get_user_settings(1)
+        assert db.delete_user_account(1) is True
+        assert db.get_user_sessions(1) == []
+# =================================================================== #
+# Theme endpoint — header theme switch persistence                    #
+# =================================================================== #
+
+class TestSettingsThemeEndpoint:
+    """Verify POST /settings/theme persists per user and validates input."""
+
+    def _login(self, client):
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["user_name"] = "Demo User"
+
+    def test_theme_requires_auth(self, client):
+        resp = client.post("/settings/theme", json={"theme": "light"})
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+
+    def test_theme_persists_valid_value(self, client, db):
+        self._login(client)
+        resp = client.post("/settings/theme", json={"theme": "light"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+        assert db.get_user_settings(1)["theme"] == "light"
+
+    def test_theme_rejects_invalid_value(self, client, db):
+        self._login(client)
+        resp = client.post("/settings/theme", json={"theme": "neon"})
+        assert resp.status_code == 400
+        assert resp.get_json()["ok"] is False
+        assert db.get_user_settings(1)["theme"] == "dark"
+
+    def test_theme_accepts_form_encoding(self, client, db):
+        self._login(client)
+        resp = client.post("/settings/theme", data={"theme": "system"})
+        assert resp.status_code == 302
+        assert db.get_user_settings(1)["theme"] == "system"
+
+    def test_theme_is_scoped_per_user(self, client, db):
+        user2_id = db.create_user("Second", "second@example.com")
+        self._login(client)
+        client.post("/settings/theme", json={"theme": "light"})
+        assert db.get_user_settings(user2_id)["theme"] == "dark"
+
+
+# =================================================================== #
+# Appearance — theme + accent applied across pages                    #
+# =================================================================== #
+
+class TestAppearanceAppliedAcrossPages:
+    """Verify the persisted theme/accent render on <body> app-wide."""
+
+    def _login(self, client):
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["user_name"] = "Demo User"
+
+    def test_settings_page_renders_persisted_theme_and_accent(self, client, db):
+        self._login(client)
+        db.update_user_settings(1, theme="light", accent_color="blue")
+        resp = client.get("/settings")
+        html = resp.get_data(as_text=True)
+        # Header theme switch reflects the saved theme...
+        assert 'id="theme-light" value="light" checked' in html
+        # ...settings theme radio reflects it...
+        assert 'name="settings_theme" value="light" checked' in html
+        # ...accent is applied to <body>.
+        assert 'data-accent="blue"' in html
+
+    def test_other_pages_apply_same_theme_and_accent(self, client, db):
+        """Consistency: the saved theme/accent must apply on every page."""
+        self._login(client)
+        db.update_user_settings(1, theme="system", accent_color="purple")
+        for url in ("/", "/profile", "/transactions", "/settings"):
+            resp = client.get(url)
+            assert resp.status_code in (200, 302), url
+            if resp.status_code == 200:
+                html = resp.get_data(as_text=True)
+                assert 'data-accent="purple"' in html, url
+                assert 'id="theme-system" value="system" checked' in html, url
+
+    def test_accent_does_not_leak_between_users(self, client, db):
+        user2_id = db.create_user("Second", "second@example.com")
+        db.update_user_settings(user2_id, accent_color="rose", theme="light")
+        self._login(client)
+        resp = client.get("/")
+        html = resp.get_data(as_text=True)
+        # User 1 keeps the default green accent; user 2's choice is not shown.
+        assert 'data-accent="green"' in html
+        assert 'data-accent="rose"' not in html
+# =================================================================== #
+# Active Sessions — list, revoke, invalidation, IDOR                  #
+# =================================================================== #
+
+class TestActiveSessions:
+    """Verify the Active Sessions feature end-to-end."""
+
+    def _login_client(self, client, db, token="current-token"):
+        """Log in as user 1 with a real session row so the guard passes."""
+        db.create_user_session(1, token, ip_address="127.0.0.1", user_agent="Chrome on Windows")
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["user_name"] = "Demo User"
+            sess["session_id"] = token
+
+    def test_settings_renders_user_sessions(self, client, db):
+        self._login_client(client, db)
+        db.create_user_session(1, "other-token", ip_address="10.0.0.9", user_agent="Firefox on Mac")
+        resp = client.get("/settings")
+        html = resp.get_data(as_text=True)
+        assert "Chrome on Windows" in html
+        assert "This device" in html  # current session badge
+        assert "Firefox on Mac" in html
+        assert 'data-revoke-session="' in html  # revocable other session
+        assert "No active sessions found." not in html
+
+    def test_sessions_never_expose_another_users_devices(self, client, db):
+        self._login_client(client, db)
+        db.create_user("Second", "second@example.com")
+        db.create_user_session(2, "hacker-session", user_agent="Evil on Hacker PC")
+        resp = client.get("/settings")
+        html = resp.get_data(as_text=True)
+        assert "Evil on Hacker PC" not in html
+
+    def test_revoke_requires_auth(self, client):
+        resp = client.post("/settings/sessions/revoke", data={"session_id": "1"})
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+
+    def test_revoke_marks_session_revoked(self, client, db):
+        self._login_client(client, db)
+        other = db.create_user_session(1, "victim-device", user_agent="Safari on iPhone")
+        resp = client.post("/settings/sessions/revoke", data={"session_id": str(other)})
+        assert resp.status_code == 302
+        assert db.get_user_session_by_token("victim-device")["revoked"] == 1
+        follow = client.get("/settings", follow_redirects=True)
+        assert "Session revoked" in follow.get_data(as_text=True)
+
+    def test_revoke_cannot_touch_another_users_session(self, client, db):
+        """IDOR: user 1 must not be able to revoke user 2's session."""
+        self._login_client(client, db)
+        db.create_user("Second", "second@example.com")
+        other_user_sid = db.create_user_session(2, "their-device", user_agent="Safari on iPhone")
+        resp = client.post("/settings/sessions/revoke", data={"session_id": str(other_user_sid)}, follow_redirects=True)
+        assert "Session not found" in resp.get_data(as_text=True)
+        assert db.get_user_session_by_token("their-device")["revoked"] == 0
+
+    def test_revoke_rejects_garbage_input(self, client, db):
+        self._login_client(client, db)
+        resp = client.post("/settings/sessions/revoke", data={"session_id": "abc"}, follow_redirects=True)
+        assert "Invalid session" in resp.get_data(as_text=True)
+
+    def test_revoke_blocks_current_session(self, client, db):
+        self._login_client(client, db, token="current-token")
+        current_id = db.get_user_session_by_token("current-token")["id"]
+        resp = client.post("/settings/sessions/revoke", data={"session_id": str(current_id)}, follow_redirects=True)
+        assert "cannot revoke your current session" in resp.get_data(as_text=True)
+        assert db.get_user_session_by_token("current-token")["revoked"] == 0
+
+    def test_revoked_session_is_invalidated_on_next_request(self, client, db):
+        db.create_user_session(1, "stolen-device", user_agent="Chrome on Windows")
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["user_name"] = "Demo User"
+            sess["session_id"] = "stolen-device"
+        # The legitimate user revokes that device.
+        db.revoke_user_session_by_token("stolen-device")
+        # The stolen device is now signed out on its next request.
+        resp = client.get("/profile")
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+        follow = client.get("/login")
+        assert b"revoked" in follow.data.lower()
+
+    def test_logout_revokes_the_session(self, client, db):
+        self._login_client(client, db, token="goodbye-token")
+        client.get("/logout")
+        assert db.get_user_session_by_token("goodbye-token")["revoked"] == 1
+
+    def test_unknown_token_is_signed_out(self, client):
+        """A session cookie with a token that no longer exists is invalid."""
+        with client.session_transaction() as sess:
+            sess["user_id"] = 1
+            sess["user_name"] = "Demo User"
+            sess["session_id"] = "ghost-token"
+        resp = client.get("/profile")
+        assert resp.status_code == 302
+        assert "/login" in resp.headers["Location"]
+# =================================================================== #
+# Data & Privacy toggles — persistence + per-user isolation            #
+# =================================================================== #
+
+class TestDataPrivacyToggles:
+    """Personalised Insights & Anonymous Usage Data toggles."""
+
+    def _login(self, client, user_id=1):
+        with client.session_transaction() as sess:
+            sess["user_id"] = user_id
+            sess["user_name"] = "Demo User"
+
+    def test_save_persists_and_renders_after_refresh(self, client, db):
+        self._login(client)
+        client.post("/settings/save", data={
+            "name": "Demo User",
+            "email": "demo@spendly.com",
+            "personalised_insights_enabled": "on",
+            "anonymous_usage_enabled": "on",
+        })
+        s = db.get_user_settings(1)
+        assert s["personalised_insights_enabled"] == 1
+        assert s["anonymous_usage_enabled"] == 1
+        # "Refresh": re-render the settings page with persisted values.
+        html = client.get("/settings").get_data(as_text=True)
+        # The Data & Privacy toggles render checked after a refresh.
+        toggles = html[html.find("Personalised Insights"):html.find("Download My Data")]
+        assert "checked" in toggles
+
+    def test_save_off_values(self, client, db):
+        self._login(client)
+        db.update_user_settings(1, personalised_insights_enabled=1, anonymous_usage_enabled=1)
+        client.post("/settings/save", data={
+            "name": "Demo User",
+            "email": "demo@spendly.com",
+            "personalised_insights_enabled": "",
+            "anonymous_usage_enabled": "",
+        })
+        s = db.get_user_settings(1)
+        assert s["personalised_insights_enabled"] == 0
+        assert s["anonymous_usage_enabled"] == 0
+
+    def test_preferences_never_leak_between_users(self, client, db):
+        user2_id = db.create_user("Second", "second@example.com")
+        self._login(client)
+        client.post("/settings/save", data={
+            "name": "Demo User",
+            "email": "demo@spendly.com",
+            "personalised_insights_enabled": "on",
+            "anonymous_usage_enabled": "on",
+        })
+        s2 = db.get_user_settings(user2_id)
+        # Surprising but correct: the DB default for personalised insights is
+        # on; anonymous usage defaults to off. Nothing from user 1 leaks.
+        assert s2["personalised_insights_enabled"] == 1
+        assert s2["anonymous_usage_enabled"] == 0
+    def test_preferences_never_leak_between_users(self, client, db):
+        user2_id = db.create_user("Second", "second@example.com")
+        self._login(client)
+        client.post("/settings/save", data={
+            "name": "Demo User",
+            "email": "demo@spendly.com",
+            "personalised_insights_enabled": "on",
+            "anonymous_usage_enabled": "on",
+        })
+        s2 = db.get_user_settings(user2_id)
+        # Surprising but correct: the DB default for personalised insights is
+        # on; anonymous usage defaults to off. Nothing from user 1 leaks.
+        assert s2["personalised_insights_enabled"] == 1
+        assert s2["anonymous_usage_enabled"] == 0
+
+
+# =================================================================== #
+# Personalised Insights enforcement on Reports                        #
+# =================================================================== #
+
+class TestPersonalisedInsightsEnforcement:
+    """The Reports page must honour the personalised-insights preference."""
+
+    def _login(self, client, user_id=1):
+        with client.session_transaction() as sess:
+            sess["user_id"] = user_id
+            sess["user_name"] = "Demo User"
+
+    def test_reports_shows_insights_when_enabled(self, client, db):
+        self._login(client)
+        db.update_user_settings(1, personalised_insights_enabled=1)
+        resp = client.get("/reports")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert "reports-insights" in html
+        # The insights block is not hidden.
+        assert 'class="reports-insights"' in html and "hidden" not in html.split("reports-insights")[1][:40]
+
+    def test_reports_hides_insights_when_disabled(self, client, db):
+        self._login(client)
+        db.update_user_settings(1, personalised_insights_enabled=0)
+        resp = client.get("/reports")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        # The block is still present in the DOM but hidden.
+        assert 'class="reports-insights" hidden' in html
+
+    def test_reports_insights_scoped_per_user(self, client, db):
+        user2_id = db.create_user("Second", "second@example.com")
+        # User 2 disabled insights; user 1 keeps them enabled.
+        db.update_user_settings(user2_id, personalised_insights_enabled=0)
+        self._login(client, user_id=1)
+        html = client.get("/reports").get_data(as_text=True)
+        assert 'class="reports-insights" hidden' not in html

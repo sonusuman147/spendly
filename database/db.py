@@ -250,6 +250,19 @@ def init_db():
     """)
 
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            token TEXT UNIQUE NOT NULL,
+            ip_address TEXT DEFAULT '',
+            user_agent TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now')),
+            last_seen TEXT DEFAULT (datetime('now')),
+            revoked INTEGER NOT NULL DEFAULT 0
+        )
+    """)
+
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS user_settings (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL REFERENCES users(id),
@@ -2897,6 +2910,114 @@ def reset_user_settings(user_id):
     return affected > 0
 
 
+def create_user_session(user_id, token, ip_address="", user_agent=""):
+    """Record a new authenticated login session for a user.
+
+    `token` is the server-generated random session token stored inside the
+    signed Flask session cookie. The row lets the app enumerate the user's
+    active sessions and revoke individual ones. Returns the row id.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO user_sessions (user_id, token, ip_address, user_agent) "
+            "VALUES (?, ?, ?, ?)",
+            (user_id, token, ip_address[:255], user_agent[:255]),
+        )
+        session_row_id = cursor.lastrowid
+        conn.commit()
+        return session_row_id
+    finally:
+        conn.close()
+
+
+def get_user_sessions(user_id):
+    """Return all session rows for a user (including revoked ones).
+
+    Sessions are ordered newest-first so the current login appears first.
+    Used for the Settings → Active Sessions list. Only ever scoped to the
+    authenticated user's id. Uses parameterized queries — safe from SQL
+    injection.
+    """
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, user_id, token, ip_address, user_agent, created_at, last_seen, "
+            "revoked FROM user_sessions WHERE user_id = ? "
+            "ORDER BY id DESC",
+            (user_id,),
+        )
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def get_user_session_by_token(token):
+    """Return a single session row for a token, or None if it does not exist.
+
+    Used by the request guard to verify that the session token stored in the
+    cookie still belongs to the logged-in user and has not been revoked.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id, user_id, token, revoked FROM user_sessions WHERE token = ?",
+            (token,),
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def revoke_user_session(user_id, session_id):
+    """Revoke (invalidate) a session owned by the given user.
+
+    The WHERE clause includes both the target session id and the owning
+    user_id, so a caller can never revoke another user's session (IDOR
+    protection). Returns True if a row was updated.
+    Uses parameterized queries — safe from SQL injection.
+    """
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE user_sessions SET revoked = 1 WHERE id = ? AND user_id = ?",
+            (session_id, user_id),
+        )
+        affected = cursor.rowcount
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
+
+
+def revoke_user_session_by_token(token):
+    """Revoke the session row matching a token (used on logout).
+
+    Returns True if a row was updated. Uses parameterized queries — safe
+    from SQL injection.
+    """
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE user_sessions SET revoked = 1 WHERE token = ?",
+            (token,),
+        )
+        affected = cursor.rowcount
+        conn.commit()
+        return affected > 0
+    finally:
+        conn.close()
+
+
 def clear_user_data(user_id):
     """
     Delete all financial data for a user (expenses, activities, budgets,
@@ -2929,7 +3050,7 @@ def delete_user_account(user_id):
     cursor = conn.cursor()
 
     # Delete child rows first (foreign key order).
-    for table in ("user_settings", "expenses", "activities", "budgets", "goals", "categories"):
+    for table in ("user_settings", "user_sessions", "expenses", "activities", "budgets", "goals", "categories"):
         cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
 
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))

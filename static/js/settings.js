@@ -454,9 +454,20 @@
     function bindSessionActions() {
         getAll('[data-revoke-session]').forEach(function (btn) {
             btn.addEventListener('click', function () {
-                var item = btn.closest('.settings-session-item');
-                if (item) item.remove();
-                showToast('Session revoked');
+                var sessionId = btn.getAttribute('data-revoke-session');
+                // A hidden form submit matches the app's existing pattern for
+                // authenticated POSTs (flash + redirect on success/failure).
+                var form = document.createElement('form');
+                form.method = 'POST';
+                form.action = '/settings/sessions/revoke';
+                form.style.display = 'none';
+                var field = document.createElement('input');
+                field.type = 'hidden';
+                field.name = 'session_id';
+                field.value = sessionId;
+                form.appendChild(field);
+                document.body.appendChild(form);
+                form.submit();
             });
         });
     }

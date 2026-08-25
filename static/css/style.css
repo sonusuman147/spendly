@@ -191,6 +191,81 @@ body:has(#theme-dark:checked) {
     }
 }
 
+/* ------------------------------------------------------------------ */
+/* Accent colour overrides — driven by body[data-accent="..."]          */
+/* ------------------------------------------------------------------ */
+/* The saved accent colour (Settings → Appearance) is written by the    */
+/* server on <body> via base.html, so these rules apply on every page   */
+/* for the signed-in user. The default green palette is preserved.      */
+
+body[data-accent="green"] {
+    --accent: #1a472a; --accent-strong: #143b21; --accent-light: #e8f0eb;
+    --accent-2: #c17f24; --accent-2-light: #fdf3e3;
+}
+body[data-accent="blue"] {
+    --accent: #2563eb; --accent-strong: #1e40af; --accent-light: #dbeafe;
+    --accent-2: #d97706; --accent-2-light: #fef3c7;
+}
+body[data-accent="purple"] {
+    --accent: #7c3aed; --accent-strong: #6d28d9; --accent-light: #ede9fe;
+    --accent-2: #d97706; --accent-2-light: #fef3c7;
+}
+body[data-accent="amber"] {
+    --accent: #b45309; --accent-strong: #92400e; --accent-light: #fef3c7;
+    --accent-2: #2563eb; --accent-2-light: #dbeafe;
+}
+body[data-accent="rose"] {
+    --accent: #be185d; --accent-strong: #9d174d; --accent-light: #fce7f3;
+    --accent-2: #c17f24; --accent-2-light: #fdf3e3;
+}
+
+/* Dark-theme accent adaptation (the dark rule has higher specificity,   */
+/* so these re-assert the chosen accent while the dark theme is active).  */
+body[data-accent="green"]:has(#theme-dark:checked) {
+    --accent: #1F7A4D; --accent-strong: #2a925f; --accent-light: #163524;
+    --accent-2: #E0A94E; --accent-2-light: #3A2E18;
+}
+body[data-accent="blue"]:has(#theme-dark:checked) {
+    --accent: #60a5fa; --accent-strong: #3b82f6; --accent-light: #172c4e;
+    --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+}
+body[data-accent="purple"]:has(#theme-dark:checked) {
+    --accent: #a78bfa; --accent-strong: #8b5cf6; --accent-light: #2a2142;
+    --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+}
+body[data-accent="amber"]:has(#theme-dark:checked) {
+    --accent: #fbbf24; --accent-strong: #f59e0b; --accent-light: #3a2c15;
+    --accent-2: #60a5fa; --accent-2-light: #172c4e;
+}
+body[data-accent="rose"]:has(#theme-dark:checked) {
+    --accent: #f472b6; --accent-strong: #ec4899; --accent-light: #3a1e2e;
+    --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+}
+
+/* System theme with the OS in dark mode — same adapted palettes. */
+@media (prefers-color-scheme: dark) {
+    body[data-accent="green"]:has(#theme-system:checked) {
+        --accent: #1F7A4D; --accent-strong: #2a925f; --accent-light: #163524;
+        --accent-2: #E0A94E; --accent-2-light: #3A2E18;
+    }
+    body[data-accent="blue"]:has(#theme-system:checked) {
+        --accent: #60a5fa; --accent-strong: #3b82f6; --accent-light: #172c4e;
+        --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+    }
+    body[data-accent="purple"]:has(#theme-system:checked) {
+        --accent: #a78bfa; --accent-strong: #8b5cf6; --accent-light: #2a2142;
+        --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+    }
+    body[data-accent="amber"]:has(#theme-system:checked) {
+        --accent: #fbbf24; --accent-strong: #f59e0b; --accent-light: #3a2c15;
+        --accent-2: #60a5fa; --accent-2-light: #172c4e;
+    }
+    body[data-accent="rose"]:has(#theme-system:checked) {
+        --accent: #f472b6; --accent-strong: #ec4899; --accent-light: #3a1e2e;
+        --accent-2: #fbbf24; --accent-2-light: #3a2e18;
+    }
+}
+
 /* --- switch component itself --- */
 
 .theme-field {
