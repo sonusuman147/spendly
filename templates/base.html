@@ -1,4 +1,6 @@
 {% if session.user_id %}
+{% set app_theme = user_prefs['theme'] if user_prefs is defined and user_prefs and user_prefs.get('theme') in ['light', 'dark', 'system'] else 'dark' %}
+{% set app_accent = accent_color_name if accent_color_name is defined else 'green' %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -17,7 +19,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head %}{% endblock %}
 </head>
-<body>
+<body data-accent="{{ app_accent }}">
 
     <!-- =============================================================== -->
     <!-- AUTHENTICATED APP SHELL — Left Sidebar Layout                    -->
@@ -165,7 +167,7 @@
                     <!-- Theme switch -->
                     <div class="theme-field app-theme-field">
                         <div class="theme-switch" role="radiogroup" aria-label="Theme">
-                            <input type="radio" name="theme" id="theme-light" value="light">
+                            <input type="radio" name="theme" id="theme-light" value="light" {% if app_theme == 'light' %}checked{% endif %}>
                             <label for="theme-light" aria-label="Light theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">
@@ -176,7 +178,7 @@
                                 </svg>
                             </label>
 
-                            <input type="radio" name="theme" id="theme-dark" value="dark" checked>
+                            <input type="radio" name="theme" id="theme-dark" value="dark" {% if app_theme == 'dark' %}checked{% endif %}>
                             <label for="theme-dark" aria-label="Dark theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">
@@ -184,7 +186,7 @@
                                 </svg>
                             </label>
 
-                            <input type="radio" name="theme" id="theme-system" value="system">
+                            <input type="radio" name="theme" id="theme-system" value="system" {% if app_theme == 'system' %}checked{% endif %}>
                             <label for="theme-system" aria-label="System theme">
                                 <svg viewBox="0 0 24 24" width="16" height="16" fill="none"
                                      stroke="currentColor" stroke-width="1.5">
@@ -241,14 +243,23 @@
     <script>document.addEventListener("DOMContentLoaded", lucide.createIcons);</script>
     <script>
         (function () {
-            var pending = document.documentElement.dataset.pendingTheme;
-            if (pending) {
-                var el = document.getElementById('theme-' + pending);
-                if (el) el.checked = true;
-            }
+            // The server marks the persisted theme radio as checked, so the
+            // applied theme always reflects the signed-in user's saved
+            // preference. localStorage is kept in sync only as a convenience
+            // for anonymous visitors; it never overrides the saved theme.
             document.querySelectorAll('.theme-switch input').forEach(function (input) {
                 input.addEventListener('change', function () {
+                    if (!input.checked) return;
                     localStorage.setItem('spendly-theme', input.value);
+                    var data = new FormData();
+                    data.append('theme', input.value);
+                    fetch('/settings/theme', {
+                        method: 'POST',
+                        body: data,
+                        credentials: 'same-origin'
+                    }).catch(function () {
+                        /* keep the local theme even if the network call fails */
+                    });
                 });
             });
         })();
@@ -276,7 +287,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     {% block head_pub %}{% endblock %}
 </head>
-<body>
+<body data-accent="{{ accent_color_name|default('green') }}">
 
     <!-- =============================================================== -->
     <!-- PUBLIC SHELL — Landing / Auth / Legal                            -->

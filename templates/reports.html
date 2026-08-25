@@ -352,7 +352,7 @@
     </div><!-- /reportContent -->
 
     <!-- ============ Insights Cards ============ -->
-    <div class="reports-insights" {% if not report.has_data %}hidden{% endif %}>
+    <div class="reports-insights" {% if not report.has_data or not insights_enabled %}hidden{% endif %}>
         <div class="reports-insights-title">
             <i data-lucide="lightbulb" class="reports-insights-icon"></i>
             <h2 class="reports-insights-heading">Insights</h2>

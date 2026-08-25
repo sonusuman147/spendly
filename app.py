@@ -3,7 +3,7 @@ import sqlite3
 
 from datetime import date as date_helper
 from dotenv import load_dotenv
-from flask import Flask, render_template, request, session, flash, redirect, url_for, abort
+from flask import Flask, render_template, request, session, flash, redirect, url_for, abort, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from database.db import (
@@ -80,11 +80,17 @@ update_category as db_update_category,
     SETTINGS_ACCENT_COLORS,
     SETTINGS_DENSITIES,
     DEFAULT_USER_SETTINGS,
+    create_user_session as db_create_user_session,
+    get_user_sessions as db_get_user_sessions,
+    get_user_session_by_token as db_get_user_session_by_token,
+    revoke_user_session as db_revoke_user_session,
+    revoke_user_session_by_token as db_revoke_user_session_by_token,
 )
 
 # Python standard library
 import csv
 import io
+import secrets as secrets_module
 from datetime import datetime as dt_datetime
 
 load_dotenv()
@@ -112,6 +118,101 @@ with app.app_context():
     # Ensure every user (including pre-existing ones) has default category
     # rows so the Categories module works for all accounts.
     db_backfill_categories()
+
+
+# ------------------------------------------------------------------ #
+# Session tracking & per-user preference injection                    #
+# ------------------------------------------------------------------ #
+
+def _record_login_session(user_id):
+    """Create a server-side session row and store its token in the cookie.
+
+    The random token is what lets the app list the user's active sessions
+    and revoke individual devices. The token is only ever stored inside the
+    signed Flask session cookie — never sent from, or trusted from, the
+    client.
+    """
+    token = secrets_module.token_urlsafe(32)
+    session["session_id"] = token
+    user_agent = (request.user_agent.string or "")[:255]
+    ip_address = request.remote_addr or ""
+    db_create_user_session(user_id, token, ip_address=ip_address, user_agent=user_agent)
+    return token
+
+
+def _friendly_device_label(user_agent):
+    """Return a readable device/browser label from a raw User-Agent string."""
+    ua = user_agent or ""
+    if "Safari" in ua and "Chrome" not in ua:
+        browser = "Safari"
+    elif "Chrome" in ua:
+        browser = "Chrome"
+    elif "Firefox" in ua:
+        browser = "Firefox"
+    elif "Edg" in ua:
+        browser = "Edge"
+    elif "MSIE" in ua or "Trident" in ua:
+        browser = "Internet Explorer"
+    else:
+        browser = "Browser"
+    if "iPhone" in ua:
+        device = "iPhone"
+    elif "iPad" in ua:
+        device = "iPad"
+    elif "Android" in ua:
+        device = "Android"
+    elif "Mac" in ua:
+        device = "Mac"
+    elif "Windows" in ua:
+        device = "Windows"
+    elif "Linux" in ua:
+        device = "Linux"
+    else:
+        device = "Device"
+    return f"{browser} on {device}"
+
+
+@app.before_request
+def guard_revoked_session():
+    """Reject requests whose signed session token has been revoked.
+
+    The app signs sessions client-side, so the only way to invalidate a
+    revoked device is to check the stored token against the user_sessions
+    table on every request. If the token is missing, belongs to another
+    user, or has been revoked, the session is cleared and the user is sent
+    back to login. This enforces "revoke session invalidates that session".
+    """
+    if request.endpoint == "static":
+        return
+    uid = session.get("user_id")
+    token = session.get("session_id")
+    if not uid or not token:
+        # Legacy sessions (created before session tracking existed) or
+        # anonymous visitors: nothing to validate.
+        return
+    row = db_get_user_session_by_token(token)
+    if row is None or row["user_id"] != uid or row["revoked"]:
+        session.clear()
+        flash("This session was revoked. Please sign in again.", "error")
+        return redirect(url_for("login"))
+
+
+@app.context_processor
+def inject_user_preferences():
+    """Expose the authenticated user's theme + accent to every page.
+
+    base.html uses these to mark the correct theme radio as checked and to
+    set the accent colour on <body>, so the saved preferences apply
+    consistently across every page for the current user only.
+    """
+    uid = session.get("user_id")
+    if not uid:
+        return {"user_prefs": None, "accent_color_name": "green"}
+    prefs = db_get_user_settings(uid)
+    return {
+        "user_prefs": prefs,
+        "accent_color_name": prefs.get("accent_color") or "green",
+    }
 
 
 
@@ -198,6 +299,7 @@ def login():
         # Success — start session and redirect
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
+        _record_login_session(user["id"])
         flash("Welcome back!", "success")
         return redirect(url_for("profile"))
 
@@ -242,6 +344,7 @@ def google_callback():
         # Existing Google user — login
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
+        _record_login_session(user["id"])
         flash("Welcome back!", "success")
         return redirect(url_for("landing"))
 
@@ -256,6 +359,7 @@ def google_callback():
             return redirect(url_for("login"))
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
+        _record_login_session(user["id"])
         flash("Google account linked! Welcome back.", "success")
         return redirect(url_for("landing"))
 
@@ -268,6 +372,7 @@ def google_callback():
 
     session["user_id"] = user_id
     session["user_name"] = name
+    _record_login_session(user_id)
     flash("Account created! Welcome to Spendly.", "success")
     return redirect(url_for("landing"))
 
@@ -297,6 +402,9 @@ def help():
 
 @app.route("/logout")
 def logout():
+    token = session.get("session_id")
+    if token:
+        db_revoke_user_session_by_token(token)
     session.clear()
     flash("You have been logged out.", "success")
     return redirect(url_for("landing"))
@@ -1613,6 +1721,12 @@ def reports():
         months=REPORT_DEFAULT_MONTHS,
     )
 
+    # Personalised Insights: when the user opts out in Settings, the
+    # data-driven insight cards are not generated/displayed. This enforces
+    # the preference wherever spending-pattern analysis is surfaced.
+    user_settings = db_get_user_settings(user_id)
+    insights_enabled = bool(user_settings.get("personalised_insights_enabled"))
+
     return render_template(
         "reports.html",
         report=report,
@@ -1626,6 +1740,7 @@ def reports():
             filters["category"],
             filters["payment"],
         ]),
+        insights_enabled=insights_enabled,
     )
 
 
@@ -2168,7 +2283,8 @@ def settings():
     """Render the Settings page with the user's real data.
 
     Requires authentication — redirects to /login if session is missing.
-    Loads the user's profile and persisted settings from the database.
+    Loads the user's profile, persisted settings, and active sessions from
+    the database. Sessions are strictly scoped to the authenticated user.
     """
     redirect_resp = login_required()
     if redirect_resp:
@@ -2182,10 +2298,26 @@ def settings():
 
     user_settings = db_get_user_settings(session["user_id"])
 
+    # Real Active Sessions for the signed-in user only.
+    current_token = session.get("session_id")
+    session_rows = db_get_user_sessions(session["user_id"])
+    active_sessions = []
+    for s in session_rows:
+        active_sessions.append({
+            "id": s["id"],
+            "device": _friendly_device_label(s["user_agent"]),
+            "created_at": s["created_at"],
+            "last_seen": s["last_seen"],
+            "ip_address": s["ip_address"],
+            "is_current": bool(current_token) and s["token"] == current_token,
+            "revoked": s["revoked"],
+        })
+
     return render_template(
         "settings.html",
         user=user,
         settings=user_settings,
+        active_sessions=active_sessions,
         currencies=SETTINGS_CURRENCIES,
         date_formats=SETTINGS_DATE_FORMATS,
         languages=SETTINGS_LANGUAGES,
@@ -2260,6 +2392,74 @@ def settings_save():
     db_update_user_settings(user_id, **settings_updates)
 
     flash("Settings saved successfully!", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/theme", methods=["POST"])
+def settings_theme():
+    """Persist the theme from the global header theme switch.
+
+    Accepts a `theme` value (JSON body or form field). Validates it against
+    the whitelist, persists it per-user, and returns JSON so the frontend
+    can apply it immediately. The settings page uses the same whitelist via
+    the normal Save Changes flow.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    if request.is_json:
+        data = request.get_json(silent=True) or {}
+        theme = (data.get("theme") or "").strip().lower()
+    else:
+        theme = request.form.get("theme", "").strip().lower()
+
+    if theme not in SETTINGS_THEMES:
+        if request.is_json:
+            return jsonify({"ok": False, "error": "Invalid theme."}), 400
+        flash("Invalid theme selected.", "error")
+        return redirect(url_for("settings"))
+
+    db_update_user_settings(session["user_id"], theme=theme)
+    if request.is_json:
+        return jsonify({"ok": True})
+    flash("Theme updated.", "success")
+    return redirect(url_for("settings"))
+
+
+@app.route("/settings/sessions/revoke", methods=["POST"])
+def settings_sessions_revoke():
+    """Revoke an individual session belonging to the signed-in user.
+
+    The session id is never trusted on its own: the SQL update is scoped by
+    both the session id AND the authenticated user's id, so a request can
+    never revoke another user's session (IDOR protection). The current
+    session cannot be revoked from here.
+    """
+    redirect_resp = login_required()
+    if redirect_resp:
+        return redirect_resp
+
+    user_id = session["user_id"]
+    raw = request.form.get("session_id", "").strip()
+    try:
+        target_id = int(raw)
+    except (TypeError, ValueError):
+        flash("Invalid session.", "error")
+        return redirect(url_for("settings"))
+
+    # Never allow revoking the session you are currently using.
+    current_token = session.get("session_id")
+    if current_token:
+        current_row = db_get_user_session_by_token(current_token)
+        if current_row and current_row["id"] == target_id:
+            flash("You cannot revoke your current session.", "error")
+            return redirect(url_for("settings"))
+
+    if db_revoke_user_session(user_id, target_id):
+        flash("Session revoked. That device will be signed out on its next request.", "success")
+    else:
+        flash("Session not found.", "error")
     return redirect(url_for("settings"))
 
 
