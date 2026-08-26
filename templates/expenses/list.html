@@ -34,7 +34,17 @@
     {% endwith %}
 
     {% if expenses %}
-    <div class="expenses-table-wrapper">
+    <div class="expenses-search-bar">
+        <div class="filter-search-wrap">
+            <i data-lucide="search" class="filter-search-icon"></i>
+            <input type="search" id="expenseSearch" class="filter-search-input"
+                   placeholder="Search by description, category, payment method, date or amount…"
+                   aria-label="Search expenses" autocomplete="off">
+        </div>
+        <span class="expenses-search-count" id="expenseSearchCount"></span>
+    </div>
+
+    <div class="expenses-table-wrapper" id="expensesTableWrapper">
         <table class="expenses-table">
             <thead>
                 <tr>
@@ -68,6 +78,9 @@
                 {% endfor %}
             </tbody>
         </table>
+        <div class="expenses-no-results" id="expensesNoResults" hidden>
+            <p>No expenses match your search. Try different keywords.</p>
+        </div>
     </div>
     {% else %}
     <div class="expenses-empty">
@@ -81,4 +94,48 @@
     {% endif %}
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /* Client-side search for the Expenses table — UI only, no backend change */
+    (function () {
+        var input = document.getElementById('expenseSearch');
+        var rows = document.querySelectorAll('#expensesTableWrapper tbody tr');
+        var noResults = document.getElementById('expensesNoResults');
+        var count = document.getElementById('expenseSearchCount');
+        if (!input || !rows.length) return;
+
+        function normalize(text) {
+            return (text || '').toLowerCase().replace(/\u00a0/g, ' ').trim();
+        }
+
+        function applyFilter() {
+            var q = normalize(input.value);
+            var visible = 0;
+            rows.forEach(function (row) {
+                if (!q) {
+                    row.style.display = '';
+                    visible++;
+                    return;
+                }
+                var haystack = normalize(row.textContent);
+                if (haystack.indexOf(q) !== -1) {
+                    row.style.display = '';
+                    visible++;
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+            if (noResults) noResults.hidden = visible !== 0;
+            if (count) {
+                count.textContent = q
+                    ? 'Showing ' + visible + ' of ' + rows.length + ' expense' + (rows.length === 1 ? '' : 's')
+                    : '';
+            }
+        }
+
+        input.addEventListener('input', applyFilter);
+    })();
+</script>
 {% endblock %}
