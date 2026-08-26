@@ -34,6 +34,15 @@
         if (window.lucide) window.lucide.createIcons();
     }
 
+    // Build an action URL from a "/…/0/…" template by replacing the zero
+    // placeholder *segment* with the real record id. Returns "" when the id
+    // is missing or invalid so we never POST to /goals/0/delete (404).
+    function buildActionUrl(template, id) {
+        var n = parseInt(id, 10);
+        if (!template || isNaN(n) || n <= 0) return '';
+        return template.replace(/\/0(?=\/|$)/, '/' + n);
+    }
+
     /* ------------------------------------------------------------------ */
     /* Animate progress bars from 0 → target width                         */
     /* ------------------------------------------------------------------ */
@@ -102,9 +111,12 @@
         var deadline = getEl('#goalFormDeadline');
         var status = getEl('#goalFormStatus');
 
+        var action = buildActionUrl(urls.edit, id);
+        if (!action) return; // No valid id — never submit to an invalid URL
+
         if (title) title.textContent = 'Edit ' + g.name;
         if (submit) submit.textContent = 'Update Goal';
-        if (form) form.action = (urls.edit || '').replace('0', String(id));
+        if (form) form.action = action;
         if (name) name.value = g.name;
         if (category) category.value = g.category;
         if (target) target.value = g.target_amount;
@@ -128,8 +140,11 @@
         var form = getEl('#goalFundsForm');
         var amount = getEl('#goalFundsAmount');
 
+        var action = buildActionUrl(urls.funds, id);
+        if (!action) return; // No valid id — never submit to an invalid URL
+
         if (text) text.textContent = 'Add funds to "' + g.name + '". Current saved: ' + money(g.saved_amount) + ' of ' + money(g.target_amount) + '.';
-        if (form) form.action = (urls.funds || '').replace('0', String(id));
+        if (form) form.action = action;
         if (amount) amount.value = '';
 
         openModal(modal);
@@ -147,8 +162,11 @@
         var text = getEl('[data-goal-delete-text]');
         var form = getEl('#goalDeleteForm');
 
+        var action = buildActionUrl(urls.delete, id);
+        if (!action) return; // No valid id — never submit to an invalid URL
+
         if (text) text.textContent = 'Are you sure you want to delete "' + g.name + '"? This cannot be undone.';
-        if (form) form.action = (urls.delete || '').replace('0', String(id));
+        if (form) form.action = action;
 
         openModal(modal);
     }

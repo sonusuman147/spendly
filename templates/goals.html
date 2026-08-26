@@ -368,11 +368,11 @@
                         </label>
                         <label class="gl-filter-field">
                             <span class="gl-filter-label">Target Amount (₹)</span>
-                            <input type="number" name="target_amount" id="goalFormTarget" class="filter-input" placeholder="50000" min="1" step="100" required>
+                            <input type="number" name="target_amount" id="goalFormTarget" class="filter-input" placeholder="50000" min="1" max="999999999" step="any" required>
                         </label>
                         <label class="gl-filter-field">
                             <span class="gl-filter-label">Saved So Far (₹)</span>
-                            <input type="number" name="saved_amount" id="goalFormSaved" class="filter-input" placeholder="0" min="0" step="100">
+                            <input type="number" name="saved_amount" id="goalFormSaved" class="filter-input" placeholder="0" min="0" max="999999999" step="any">
                         </label>
                         <label class="gl-filter-field">
                             <span class="gl-filter-label">Deadline</span>
@@ -412,7 +412,7 @@
                 <form method="POST" action="" id="goalFundsForm">
                     <label class="gl-filter-field">
                         <span class="gl-filter-label">Amount (₹)</span>
-                        <input type="number" name="amount" id="goalFundsAmount" class="filter-input" placeholder="1000" min="1" step="100" required>
+                        <input type="number" name="amount" id="goalFundsAmount" class="filter-input" placeholder="1000" min="1" max="999999999" step="any" required>
                     </label>
                     <div class="gl-modal-actions">
                         <button type="button" class="btn-export" data-modal-close>Cancel</button>
