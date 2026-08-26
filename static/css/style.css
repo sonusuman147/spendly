@@ -334,6 +334,10 @@ body[data-accent="rose"]:has(#theme-dark:checked) {
     padding: 0;
 }
 
+[hidden] {
+    display: none !important;
+}
+
 html { font-size: 16px; scroll-behavior: smooth; }
 
 body {

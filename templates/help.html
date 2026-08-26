@@ -172,30 +172,18 @@
       <button type="button" class="btn-help-ghost" data-help-new-ticket><i data-lucide="plus" class="help-btn-icon"></i>New Request</button>
     </div>
     <div class="help-tickets">
-      <div class="help-ticket" data-help-ticket>
-        <div class="help-ticket-icon" style="--ticket-accent: var(--accent);"><i data-lucide="wallet"></i></div>
+      {% for t in tickets %}
+      <div class="help-ticket" data-help-ticket data-ticket-no="{{ t.ticket_no }}" data-ticket-message="{{ t.message }}" data-ticket-topic="{{ t.topic_label }}" data-ticket-status="{{ t.status_label }}" data-ticket-subject="{{ t.subject }}" data-ticket-created="{{ t.created_display }}">
+        <div class="help-ticket-icon" style="--ticket-accent: var(--accent);"><i data-lucide="{{ t.topic_icon }}"></i></div>
         <div class="help-ticket-body">
-          <div class="help-ticket-top"><h3 class="help-ticket-title">Can't see my imported transactions</h3><span class="help-ticket-status help-ticket-status-open"><i data-lucide="clock" class="help-ticket-status-icon"></i>In Progress</span></div>
-          <p class="help-ticket-desc">#SLY-1042 · Submitted 18 Aug 2026 · Expenses · Priya from our team is looking into this.</p>
+          <div class="help-ticket-top"><h3 class="help-ticket-title">{{ t.subject }}</h3><span class="help-ticket-status {{ t.status_class }}"><i data-lucide="{{ t.status_icon }}" class="help-ticket-status-icon"></i>{{ t.status_label }}</span></div>
+          <p class="help-ticket-desc">#{{ t.ticket_no }} · Submitted {{ t.created_display }} · {{ t.topic_label }} · {{ t.message_count }} message{{ '' if t.message_count == 1 else 's' }}</p>
         </div>
         <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
       </div>
-      <div class="help-ticket" data-help-ticket>
-        <div class="help-ticket-icon" style="--ticket-accent: var(--accent-2);"><i data-lucide="piggy-bank"></i></div>
-        <div class="help-ticket-body">
-          <div class="help-ticket-top"><h3 class="help-ticket-title">Budget alert threshold not updating</h3><span class="help-ticket-status help-ticket-status-resolved"><i data-lucide="check-circle" class="help-ticket-status-icon"></i>Resolved</span></div>
-          <p class="help-ticket-desc">#SLY-1017 · Submitted 12 Aug 2026 · Budgets · Resolved by our team on 14 Aug.</p>
-        </div>
-        <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
-      </div>
-      <div class="help-ticket" data-help-ticket>
-        <div class="help-ticket-icon" style="--ticket-accent: var(--bar-bills);"><i data-lucide="shield"></i></div>
-        <div class="help-ticket-body">
-          <div class="help-ticket-top"><h3 class="help-ticket-title">Two-factor code not receiving</h3><span class="help-ticket-status help-ticket-status-closed"><i data-lucide="x-circle" class="help-ticket-status-icon"></i>Closed</span></div>
-          <p class="help-ticket-desc">#SLY-0989 · Submitted 2 Aug 2026 · Security · Closed — resolved via email.</p>
-        </div>
-        <div class="help-ticket-actions"><button type="button" class="btn-help-small" data-help-view-ticket>View</button></div>
-      </div>
+      {% else %}
+      <p class="help-block-sub" style="padding: 8px 4px;">You haven't submitted any support requests yet. Click "New Request" to get in touch with our team.</p>
+      {% endfor %}
     </div>
   </div>
 
@@ -268,7 +256,7 @@
     <div class="txn-modal-panel">
       <div class="txn-modal-head"><h3 class="txn-modal-title">Contact Support</h3><button type="button" class="txn-modal-close" data-help-modal-close aria-label="Close"><i data-lucide="x"></i></button></div>
       <div class="txn-modal-body">
-        <form id="helpContactForm" data-help-contact-form novalidate>
+        <form id="helpContactForm" action="{{ url_for('help_create_ticket') }}" method="POST" data-help-contact-form novalidate>
           <label class="help-form-group"><span class="help-form-label">Topic</span>
             <select name="topic" class="help-form-select" required>
               <option value="">Select a topic...</option>

@@ -232,6 +232,11 @@
     font-size: 0.9rem;
 }
 
+.help-feedback[hidden],
+.help-empty[hidden] {
+    display: none !important;
+}
+
 .help-spinner {
     width: 32px;
     height: 32px;
@@ -799,6 +804,8 @@
     margin-bottom: 1rem;
 }
 
+.help-form-error[hidden] { display: none !important; }
+
 .help-form-error-icon { width: 15px; height: 15px; flex-shrink: 0; }
 
 .help-form-actions {
@@ -817,6 +824,11 @@
     gap: 0.85rem;
     padding: 1.5rem 0.5rem;
 }
+
+.help-form-success[hidden] { display: none !important; }
+[data-help-contact-form][hidden] { display: none !important; }
+.help-modal[hidden],
+.txn-modal[hidden] { display: none !important; }
 
 .help-form-success-icon {
     width: 56px;

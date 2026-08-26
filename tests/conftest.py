@@ -54,6 +54,8 @@ def app():
         conn.execute("DELETE FROM categories")
         conn.execute("DELETE FROM goals")
         conn.execute("DELETE FROM budgets")
+        conn.execute("DELETE FROM ticket_messages")
+        conn.execute("DELETE FROM support_tickets")
         conn.execute("DELETE FROM user_sessions")
         conn.execute("DELETE FROM user_settings")
         conn.execute("DELETE FROM users")
