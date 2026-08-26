@@ -80,6 +80,8 @@ update_category as db_update_category,
     SETTINGS_ACCENT_COLORS,
     SETTINGS_DENSITIES,
     DEFAULT_USER_SETTINGS,
+    get_security_answer_hash as db_get_security_answer_hash,
+    seed_help_content as db_seed_help_content,
     create_user_session as db_create_user_session,
     get_user_sessions as db_get_user_sessions,
     get_user_session_by_token as db_get_user_session_by_token,
@@ -118,6 +120,8 @@ with app.app_context():
     # Ensure every user (including pre-existing ones) has default category
     # rows so the Categories module works for all accounts.
     db_backfill_categories()
+    # Seed the Help & Support knowledge base (articles + FAQs) if empty.
+    db_seed_help_content()
 
 
 # ------------------------------------------------------------------ #
@@ -689,23 +693,14 @@ def reset_password():
                 security_question=session["security_question"],
             )
 
-        # Fetch the stored security answer hash directly
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT security_answer_hash FROM users WHERE id = ?",
-            (session["reset_user_id"],),
-        )
-        result = cursor.fetchone()
-        conn.close()
+        # Fetch the stored security answer hash via the DB helper
+        stored_hash = db_get_security_answer_hash(session["reset_user_id"])
 
-        if result is None:
+        if stored_hash is None:
             session.pop("reset_user_id", None)
             session.pop("security_question", None)
             flash("Session expired. Please start again.", "error")
             return redirect(url_for("forgot_password"))
-
-        stored_hash = result["security_answer_hash"]
 
         if not stored_hash or not check_password_hash(stored_hash, answer):
             flash("Incorrect answer. Please try again.", "error")
@@ -963,7 +958,10 @@ def transactions_export():
         return redirect_resp
 
     user_id = session["user_id"]
-    filters = _parse_transaction_filters()
+    # Use the user's real categories so custom category filters are honoured.
+    user_cats = db_get_user_categories(user_id)
+    valid_categories = [c["name"] for c in user_cats] or CATEGORIES
+    filters = _parse_transaction_filters(valid_categories)
 
     # If specific ids were selected, export only those (ownership-scoped).
     ids_raw = request.args.get("ids", "")
@@ -1066,7 +1064,9 @@ def transactions_bulk_delete():
         flash(f"{deleted} transaction(s) deleted successfully!", "success")
 
     # Preserve the current filters when redirecting back.
-    filters = _parse_transaction_filters()
+    filters = _parse_transaction_filters(
+        [c["name"] for c in db_get_user_categories(user_id)] or CATEGORIES,
+    )
     args = _transactions_query_args(filters)
     return redirect(url_for("transactions", **args))
 

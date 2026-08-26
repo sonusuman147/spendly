@@ -418,14 +418,16 @@ def seed_db():
         (user_id, 100.00, "Other", today - timedelta(days=2), "Miscellaneous", "cash"),
     ]
 
-    cursor.executemany(
-        "INSERT INTO expenses (user_id, amount, category, date, description, payment_method) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
-        [
-            (uid, amt, cat, d.isoformat(), desc, pm)
-            for uid, amt, cat, d, desc, pm in sample_expenses
-        ],
-    )
+    # Insert expenses one by one so we capture the real auto-generated ids —
+    # activity rows must reference actual expense ids, never assumed ones.
+    expense_ids = []
+    for uid, amt, cat, d, desc, pm in sample_expenses:
+        cursor.execute(
+            "INSERT INTO expenses (user_id, amount, category, date, description, payment_method) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (uid, amt, cat, d.isoformat(), desc, pm),
+        )
+        expense_ids.append(cursor.lastrowid)
 
     # Seed matching "added" activity records so Recent Activity is populated
     # with real data for the demo user on first boot.
@@ -433,8 +435,9 @@ def seed_db():
         "INSERT INTO activities (user_id, action, expense_id, category, description, amount) "
         "VALUES (?, ?, ?, ?, ?, ?)",
         [
-            (user_id, "added", i + 1, cat, desc, amt)
-            for i, (uid, amt, cat, d, desc, pm) in enumerate(sample_expenses)
+            (user_id, "added", exp_id, cat, desc, amt)
+            for exp_id, (uid, amt, cat, d, desc, pm)
+            in zip(expense_ids, sample_expenses)
         ],
     )
 
@@ -631,20 +634,6 @@ def get_user_by_email_with_security(email):
     user = cursor.fetchone()
     conn.close()
     return dict(user) if user else None
-
-
-def clear_expenses():
-    """Delete all records from the expenses table.
-
-    Users table is left untouched — only expense records are removed.
-    Uses the existing get_db() helper to obtain a database connection.
-    Safe to call multiple times.
-    """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM expenses;")
-    conn.commit()
-    conn.close()
 
 
 def get_user_expenses_summary(user_id, start_date=None, end_date=None):
@@ -910,10 +899,14 @@ def get_transactions(user_id, search="", category="", date_from=None, date_to=No
     last_row = cursor.fetchone()
 
     # Pagination math.
+    try:
+        page = int(page)
+    except (TypeError, ValueError):
+        page = 1
     if per_page is None or per_page <= 0:
         per_page = total if total > 0 else 1
     pages = max(1, (total + per_page - 1) // per_page)
-    page = max(1, min(int(page), pages))
+    page = max(1, min(page, pages))
 
     # Fetch the page of items.
     cursor.execute(
@@ -1283,11 +1276,18 @@ def get_budget_data(user_id, month=None, category=None, status=None):
     pct = (total_spent / total_budget * 100) if total_budget > 0 else 0.0
     over_count = sum(1 for b in budgets if b["status_key"] == "over")
 
-    if month == f"{date.today().year:04d}-{date.today().month:02d}":
-        days_left = date.today().day
-        days_left = max(1, date.today().day)
+    # Days left in the selected month (for the daily-pace calculation).
+    import calendar as _calendar
+    today = date.today()
+    if month == f"{today.year:04d}-{today.month:02d}":
+        last_day = _calendar.monthrange(today.year, today.month)[1]
+        days_left = max(1, last_day - today.day + 1)
     else:
-        days_left = 1
+        try:
+            y, m = int(month[:4]), int(month[5:7])
+            days_left = _calendar.monthrange(y, m)[1]
+        except (ValueError, IndexError):
+            days_left = 1
     daily = max(0, remaining / days_left) if days_left > 0 else 0
 
     summary = {
@@ -3029,7 +3029,8 @@ def clear_user_data(user_id):
     cursor = conn.cursor()
 
     counts = {}
-    for table in ("expenses", "activities", "budgets", "goals", "categories"):
+    for table in ("expenses", "activities", "budgets", "goals", "categories",
+                  "ticket_messages", "support_tickets"):
         cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
         counts[table] = cursor.rowcount
 
@@ -3049,8 +3050,12 @@ def delete_user_account(user_id):
     conn = get_db()
     cursor = conn.cursor()
 
-    # Delete child rows first (foreign key order).
-    for table in ("user_settings", "user_sessions", "expenses", "activities", "budgets", "goals", "categories"):
+    # Delete child rows first (foreign key order). Support tickets/messages
+    # reference users(id), so they must be removed too or the FK constraint
+    # would reject the user deletion.
+    for table in ("user_settings", "user_sessions", "expenses", "activities",
+                  "budgets", "goals", "categories", "ticket_messages",
+                  "support_tickets"):
         cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (user_id,))
 
     cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
@@ -3081,6 +3086,23 @@ def add_activity(user_id, action, expense_id=None, category=None,
     conn.commit()
     conn.close()
     return activity_id
+
+
+def get_security_answer_hash(user_id):
+    """Return the stored security answer hash for a user, or None.
+
+    Used by the forgot-password flow so route code does not issue raw SQL.
+    Uses a parameterized query — safe from SQL injection.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT security_answer_hash FROM users WHERE id = ?",
+        (user_id,),
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row["security_answer_hash"] if row else None
 
 
 def get_recent_activity(user_id, limit=8, category=None):
@@ -3273,10 +3295,16 @@ def create_support_ticket(user_id, subject, category, message, priority="normal"
     """
     conn = get_db()
     cursor = conn.cursor()
-    # Generate a unique ticket number.
-    cursor.execute("SELECT COUNT(*) FROM support_tickets")
-    count = cursor.fetchone()[0]
-    ticket_no = f"SLY-{1000 + count + 1}"
+    # Generate a unique ticket number based on MAX(id) — a COUNT-based number
+    # could collide with an existing ticket_no after tickets are deleted.
+    cursor.execute("SELECT COALESCE(MAX(id), 0) AS max_id FROM support_tickets")
+    max_id = cursor.fetchone()["max_id"]
+    while True:
+        ticket_no = f"SLY-{1000 + max_id + 1}"
+        cursor.execute("SELECT 1 FROM support_tickets WHERE ticket_no = ?", (ticket_no,))
+        if cursor.fetchone() is None:
+            break
+        max_id += 1
 
     cursor.execute(
         "INSERT INTO support_tickets (user_id, ticket_no, subject, category, priority, message, status) "
