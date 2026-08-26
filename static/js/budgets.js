@@ -38,6 +38,15 @@
         if (window.lucide) window.lucide.createIcons();
     }
 
+    // Build an action URL from a "/…/0/…" template by replacing the zero
+    // placeholder *segment* with the real record id. Returns "" when the id
+    // is missing or invalid so we never POST to /budgets/0/delete (404).
+    function buildActionUrl(template, id) {
+        var n = parseInt(id, 10);
+        if (!template || isNaN(n) || n <= 0) return '';
+        return template.replace(/\/0(?=\/|$)/, '/' + n);
+    }
+
     /* ------------------------------------------------------------------ */
     /* Animate progress bars from 0 → target width                         */
     /* ------------------------------------------------------------------ */
@@ -96,9 +105,12 @@
         var category = getEl('#budgetFormCategory');
         var limitInput = getEl('#budgetFormLimit');
 
+        var action = buildActionUrl(urls.edit, id);
+        if (!action) return; // No valid id — never submit to an invalid URL
+
         if (title) title.textContent = 'Edit ' + name + ' Budget';
         if (submit) submit.textContent = 'Update Budget';
-        if (form) form.action = (urls.edit || '').replace('0', String(id));
+        if (form) form.action = action;
         if (category) {
             category.value = name;
             category.disabled = true; // Category is fixed when editing
@@ -118,8 +130,11 @@
         var text = getEl('[data-budget-delete-text]');
         var form = getEl('#budgetDeleteForm');
 
+        var action = buildActionUrl(urls.delete, id);
+        if (!action) return; // No valid id — never submit to an invalid URL
+
         if (text) text.textContent = 'Are you sure you want to delete the ' + name + ' budget? It will fall back to its default limit.';
-        if (form) form.action = (urls.delete || '').replace('0', String(id));
+        if (form) form.action = action;
 
         openModal(modal);
     }
