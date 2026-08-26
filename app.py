@@ -1,7 +1,7 @@
 import os
 import sqlite3
 
-from datetime import date as date_helper
+from datetime import date as date_helper, datetime
 from dotenv import load_dotenv
 from flask import Flask, render_template, request, session, flash, redirect, url_for, abort, jsonify
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -82,6 +82,9 @@ update_category as db_update_category,
     DEFAULT_USER_SETTINGS,
     get_security_answer_hash as db_get_security_answer_hash,
     seed_help_content as db_seed_help_content,
+    # Help & Support module
+    create_support_ticket as db_create_support_ticket,
+    get_user_tickets as db_get_user_tickets,
     create_user_session as db_create_user_session,
     get_user_sessions as db_get_user_sessions,
     get_user_session_by_token as db_get_user_session_by_token,
@@ -395,13 +398,163 @@ def privacy():
     return render_template("privacy.html")
 
 
+# Display metadata for support ticket topics (value -> label, lucide icon).
+HELP_TOPIC_META = {
+    "getting-started": ("Getting Started", "rocket"),
+    "expenses": ("Expenses", "wallet"),
+    "budgets": ("Budgets", "piggy-bank"),
+    "goals": ("Goals", "target"),
+    "reports": ("Reports", "bar-chart-3"),
+    "settings": ("Settings", "settings"),
+    "security": ("Security", "shield"),
+    "privacy": ("Data & Privacy", "eye-off"),
+    "other": ("Something else", "circle-help"),
+}
+
+# Mapping of topic titles or aliases to canonical slug keys
+HELP_TOPIC_ALIASES = {
+    "getting started": "getting-started",
+    "getting-started": "getting-started",
+    "expenses": "expenses",
+    "expense": "expenses",
+    "budgets": "budgets",
+    "budget": "budgets",
+    "goals": "goals",
+    "goal": "goals",
+    "reports": "reports",
+    "report": "reports",
+    "settings": "settings",
+    "setting": "settings",
+    "security": "security",
+    "privacy": "privacy",
+    "data & privacy": "privacy",
+    "data-privacy": "privacy",
+    "other": "other",
+    "something else": "other",
+}
+
+
+def _normalize_help_topic(raw_topic):
+    """Normalize a topic name or slug to a canonical key in HELP_TOPIC_META."""
+    if not raw_topic:
+        return None
+    key = str(raw_topic).strip().lower()
+    if key in HELP_TOPIC_META:
+        return key
+    if key in HELP_TOPIC_ALIASES:
+        return HELP_TOPIC_ALIASES[key]
+    slug = key.replace("_", "-").replace(" & ", "-").replace(" ", "-")
+    if slug in HELP_TOPIC_META:
+        return slug
+    if slug in HELP_TOPIC_ALIASES:
+        return HELP_TOPIC_ALIASES[slug]
+    return None
+
+
+# Display metadata for support ticket statuses.
+HELP_STATUS_META = {
+    "open": ("Open", "clock", "help-ticket-status-open"),
+    "in_progress": ("In Progress", "clock", "help-ticket-status-open"),
+    "resolved": ("Resolved", "check-circle", "help-ticket-status-resolved"),
+    "closed": ("Closed", "x-circle", "help-ticket-status-closed"),
+}
+
+
 @app.route("/help")
 def help():
     """Render the Help & Support page (requires authentication)."""
     redirect_resp = login_required()
     if redirect_resp:
         return redirect_resp
-    return render_template("help.html")
+    user_id = session["user_id"]
+    tickets = []
+    for t in db_get_user_tickets(user_id):
+        norm_cat = _normalize_help_topic(t["category"]) or t["category"]
+        topic_label, topic_icon = HELP_TOPIC_META.get(norm_cat, (t["category"].title(), "ticket"))
+        status_label, status_icon, status_class = HELP_STATUS_META.get(
+            t["status"], (t["status"].title(), "clock", "help-ticket-status-open")
+        )
+        try:
+            created_display = datetime.strptime(t["created_at"][:10], "%Y-%m-%d").strftime("%d %b %Y")
+        except (ValueError, TypeError):
+            created_display = (t["created_at"] or "")[:10]
+        tickets.append({
+            "id": t["id"],
+            "ticket_no": t["ticket_no"],
+            "subject": t["subject"],
+            "category": t["category"],
+            "priority": t.get("priority", "normal"),
+            "message": t.get("message", ""),
+            "status": t["status"],
+            "topic_label": topic_label,
+            "topic_icon": topic_icon,
+            "status_label": status_label,
+            "status_icon": status_icon,
+            "status_class": status_class,
+            "message_count": t.get("message_count", 1),
+            "created_display": created_display,
+        })
+    return render_template("help.html", tickets=tickets)
+
+
+@app.route("/help/tickets", methods=["POST"])
+def help_create_ticket():
+    """Create a support ticket from the Contact Support form (JSON or form-encoded).
+
+    The frontend sends `topic`, `subject`, and `message`; `topic` is stored
+    as the ticket's category. Scoped to the logged-in user.
+    """
+    is_json = (
+        request.is_json
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in (request.headers.get("Accept") or "")
+        or "application/json" in (request.headers.get("Content-Type") or "")
+    )
+
+    if not session.get("user_id"):
+        if is_json:
+            return jsonify({"ok": False, "error": "Please sign in to submit a request."}), 401
+        flash("Please sign in to submit a request.", "error")
+        return redirect(url_for("login"))
+
+    data = request.get_json(silent=True) if request.is_json else None
+    if not data:
+        data = request.form
+
+    raw_topic = (data.get("topic") or "").strip()
+    topic = _normalize_help_topic(raw_topic)
+    subject = (data.get("subject") or "").strip()
+    message = (data.get("message") or "").strip()
+
+    err_msg = None
+    if not raw_topic or not topic:
+        err_msg = "Please select a topic."
+    elif not subject:
+        err_msg = "Please enter a subject."
+    elif len(subject) > 120:
+        err_msg = "Subject must be 120 characters or fewer."
+    elif not message or len(message) < 10:
+        err_msg = "Message must be at least 10 characters."
+    elif len(message) > 2000:
+        err_msg = "Message must be 2000 characters or fewer."
+
+    if err_msg:
+        if is_json:
+            return jsonify({"ok": False, "error": err_msg}), 400
+        flash(err_msg, "error")
+        return redirect(url_for("help"))
+
+    ticket_id = db_create_support_ticket(session["user_id"], subject, topic, message)
+    if not ticket_id:
+        if is_json:
+            return jsonify({"ok": False, "error": "Could not create support ticket. Please try again."}), 500
+        flash("Could not create support ticket. Please try again.", "error")
+        return redirect(url_for("help"))
+
+    if is_json:
+        return jsonify({"ok": True, "ticket_id": ticket_id})
+    flash("Support request submitted successfully.", "success")
+    return redirect(url_for("help"))
 
 
 @app.route("/logout")
