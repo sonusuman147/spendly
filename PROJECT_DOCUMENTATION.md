@@ -428,6 +428,170 @@ CREATE TABLE support_faqs (
 
 ---
 
+
+```mermaid
+erDiagram
+
+    users ||--o{ expenses : "user_id"
+    users ||--o{ activities : "user_id"
+    users ||--o{ categories : "user_id"
+    users ||--o{ budgets : "user_id"
+    users ||--o{ goals : "user_id"
+    users ||--o{ user_sessions : "user_id"
+    users ||--|| user_settings : "user_id"
+    users ||--o{ support_tickets : "user_id"
+    users ||--o{ ticket_messages : "user_id"
+    support_tickets ||--o{ ticket_messages : "ticket_id"
+    expenses ||--o{ activities : "expense_id"
+
+    users {
+        INTEGER id PK
+        TEXT name
+        TEXT email UK
+        TEXT password_hash
+        TEXT created_at
+        TEXT google_id
+        TEXT security_question
+        TEXT security_answer_hash
+        TEXT phone
+        TEXT bio
+    }
+
+    expenses {
+        INTEGER id PK
+        INTEGER user_id FK
+        REAL amount
+        TEXT category
+        TEXT date
+        TEXT description
+        TEXT payment_method
+        TEXT created_at
+    }
+
+    activities {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT action
+        INTEGER expense_id FK
+        TEXT category
+        TEXT description
+        REAL amount
+        TEXT created_at
+    }
+
+    categories {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT name
+        TEXT description
+        TEXT icon
+        TEXT color
+        TEXT created_at
+    }
+
+    budgets {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT category
+        REAL limit_amount
+        TEXT period
+        INTEGER is_default
+        TEXT created_at
+    }
+
+    goals {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT name
+        TEXT category
+        REAL target_amount
+        REAL saved_amount
+        TEXT deadline
+        TEXT status
+        TEXT created_at
+        TEXT updated_at
+    }
+
+    user_sessions {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT token UK
+        TEXT ip_address
+        TEXT user_agent
+        TEXT created_at
+        TEXT last_seen
+        INTEGER revoked
+    }
+
+    user_settings {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT currency
+        TEXT date_format
+        TEXT language
+        TEXT week_start
+        INTEGER budget_alert_threshold
+        TEXT default_payment_method
+        TEXT theme
+        TEXT accent_color
+        TEXT interface_density
+        INTEGER two_factor_enabled
+        INTEGER login_alerts_enabled
+        INTEGER expense_reminders_enabled
+        INTEGER budget_alerts_enabled
+        INTEGER goal_milestones_enabled
+        INTEGER weekly_summary_enabled
+        INTEGER product_updates_enabled
+        INTEGER personalised_insights_enabled
+        INTEGER anonymous_usage_enabled
+        TEXT created_at
+        TEXT updated_at
+    }
+
+    support_tickets {
+        INTEGER id PK
+        INTEGER user_id FK
+        TEXT ticket_no UK
+        TEXT subject
+        TEXT category
+        TEXT priority
+        TEXT message
+        TEXT status
+        TEXT created_at
+        TEXT updated_at
+    }
+
+    ticket_messages {
+        INTEGER id PK
+        INTEGER ticket_id FK
+        INTEGER user_id FK
+        TEXT author
+        TEXT body
+        INTEGER is_staff
+        TEXT created_at
+    }
+
+    support_articles {
+        INTEGER id PK
+        TEXT topic
+        TEXT title
+        TEXT excerpt
+        TEXT body
+        INTEGER is_public
+        INTEGER article_order
+        TEXT created_at
+    }
+
+    support_faqs {
+        INTEGER id PK
+        TEXT topic
+        TEXT question
+        TEXT answer
+        INTEGER faq_order
+        TEXT created_at
+}
+```
+
 ## 8. Routes
 
 ### 8.1 Public & Authentication
