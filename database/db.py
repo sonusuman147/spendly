@@ -2305,7 +2305,7 @@ def _compute_period_range(months_back):
 
 
 def get_report_data(user_id, date_from=None, date_to=None, category=None,
-                    payment=None, months=REPORT_DEFAULT_MONTHS):
+                    payment=None, months=REPORT_DEFAULT_MONTHS, trend_period="monthly"):
     """Compute full report data for a user with optional filtering.
 
     When date_from/date_to are not provided, defaults to the last ``months``
@@ -2330,7 +2330,7 @@ def get_report_data(user_id, date_from=None, date_to=None, category=None,
       - monthly_summary: list of {month_label, transaction_count,
         total, average} ordered chronologically
       - insights: list of {icon, accent, title, text}
-      - filter_info: {date_from, date_to, category, payment}
+      - filter_info: {date_from, date_to, category, payment, trend_period}
     """
     # Default date range = last N months.
     if not date_from and not date_to:
@@ -2415,22 +2415,49 @@ def get_report_data(user_id, date_from=None, date_to=None, category=None,
     prev_total_spending = round(prev_totals["total"], 2)
     prev_total_transactions = prev_totals["count"]
 
-    # ---- Monthly trend (current period, chronological) ----
+    # ---- Dynamic trend (current period, chronological) ----
+    if trend_period == "daily":
+        group_expr = "strftime('%Y-%m-%d', date)"
+    elif trend_period == "weekly":
+        group_expr = "strftime('%Y-%W', date)"
+    else:
+        group_expr = "strftime('%Y-%m', date)"
+        
     cursor.execute(
-        "SELECT strftime('%Y-%m', date) AS month, "
+        f"SELECT {group_expr} AS period, "
         "COALESCE(SUM(amount), 0.0) AS amount "
         f"FROM expenses WHERE {where} "
-        "GROUP BY month ORDER BY month ASC",
+        "GROUP BY period ORDER BY period ASC",
         tuple(full_params),
     )
     monthly_trend = []
     month_names = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    
+    import datetime
     for row in cursor.fetchall():
-        parts = row["month"].split("-")
-        label = f"{month_names[int(parts[1])]} {parts[0]}"
+        period_val = row["period"]
+        if not period_val:
+            continue
+            
+        if trend_period == "daily":
+            # period_val is 'YYYY-MM-DD'
+            try:
+                dt = datetime.datetime.strptime(period_val, "%Y-%m-%d")
+                label = f"{month_names[dt.month]} {dt.day}"
+            except ValueError:
+                label = period_val
+        elif trend_period == "weekly":
+            # period_val is 'YYYY-WW'
+            parts = period_val.split("-")
+            label = f"Week {parts[1]}, {parts[0]}"
+        else:
+            # period_val is 'YYYY-MM'
+            parts = period_val.split("-")
+            label = f"{month_names[int(parts[1])]} {parts[0]}"
+            
         monthly_trend.append({
-            "month": row["month"],
+            "month": period_val,
             "label": label,
             "amount": round(row["amount"], 2),
         })
@@ -2567,6 +2594,7 @@ def get_report_data(user_id, date_from=None, date_to=None, category=None,
             "date_to": date_to,
             "category": category or "",
             "payment": payment or "",
+            "trend_period": trend_period,
         },
     }
 

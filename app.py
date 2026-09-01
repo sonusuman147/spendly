@@ -1915,10 +1915,18 @@ def insights():
         session.clear()
         return redirect(url_for("login"))
         
-    report_data = get_report_data(user_id)
-    insights_data = report_data.get("insights", [])
+    date_from = request.args.get("date_from") or None
+    date_to = request.args.get("date_to") or None
+    trend_period = request.args.get("trend_period") or "monthly"
         
-    return render_template("insights.html", user=user, insights=insights_data)
+    report_data = get_report_data(
+        user_id,
+        date_from=date_from,
+        date_to=date_to,
+        trend_period=trend_period
+    )
+        
+    return render_template("insights.html", user=user, report=report_data, insights=report_data.get("insights", []))
 
 
 # ------------------------------------------------------------------ #
