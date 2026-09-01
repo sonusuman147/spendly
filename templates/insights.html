@@ -12,152 +12,547 @@
 
 {% block head %}
 <style>
-    /* Styling specifically for Insights page */
+    /* Header */
     .insights-section {
         max-width: var(--max-width);
         margin: 0 auto;
         padding: 0 1rem 3rem;
     }
-    
     .insights-header {
         display: flex;
-        align-items: flex-end;
         justify-content: space-between;
+        align-items: flex-start;
         margin-bottom: 2rem;
+        flex-wrap: wrap;
         gap: 1rem;
     }
+    .insights-header-copy { display: flex; flex-direction: column; gap: 0.4rem; }
+    .insights-title-row { display: flex; align-items: center; gap: 0.5rem; }
+    .insights-title-icon { color: #8b5cf6; display: flex; }
+    .insights-title { font-size: 1.5rem; font-weight: 700; margin: 0; color: var(--text-color); letter-spacing: -0.02em; }
+    .insights-subtitle { color: var(--text-muted); font-size: 0.95rem; margin: 0; }
     
-    .insights-title {
-        font-size: 2rem;
-        font-weight: 700;
-        margin: 0 0 0.5rem;
-        color: var(--text-color);
-        letter-spacing: -0.02em;
+    .date-selector-btn, .dropdown-btn {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 0.75rem; border-radius: 8px;
+        background: var(--paper-card, #fff); border: 1px solid var(--border, #d1d5db) !important;
+        font-size: 0.85rem; color: var(--ink, #333); cursor: pointer;
+        font-family: inherit; outline: none; transition: all 0.2s;
+    }
+    .date-selector-btn:hover, .dropdown-btn:hover {
+        border-color: var(--accent, #1a472a) !important;
+    }
+    .date-selector-btn:focus, .dropdown-btn:focus {
+        border-color: var(--accent, #1a472a) !important;
+        box-shadow: 0 0 0 2px var(--accent-light, rgba(26, 71, 42, 0.2));
     }
     
-    .insights-subtitle {
-        color: var(--text-muted);
-        font-size: 1.05rem;
-        margin: 0;
+    /* 4 Summary Cards */
+    .summary-grid {
+        display: grid; grid-template-columns: repeat(1, 1fr); gap: 1.25rem; margin-bottom: 1.5rem;
     }
+    @media (min-width: 640px) { .summary-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .summary-grid { grid-template-columns: repeat(4, 1fr); } }
     
-    /* Layout for Insights grid */
-    .insights-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 1.5rem;
+    .summary-card {
+        background: var(--paper-card, #fff); 
+        border: 1px solid var(--border, #d1d5db) !important;
+        border-radius: 12px; padding: 1.25rem;
+        display: flex; flex-direction: column; gap: 0.75rem; position: relative;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
+    .summary-header { display: flex; align-items: center; gap: 0.75rem; }
+    .summary-icon {
+        width: 36px; height: 36px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; color: white;
+    }
+    .summary-title { font-size: 0.9rem; color: var(--text-muted); margin: 0; font-weight: 500; }
+    .summary-value { font-size: 1.5rem; font-weight: 700; margin: 0; color: var(--text-color); }
+    .summary-subtext { font-size: 0.85rem; display: flex; align-items: center; gap: 0.25rem; }
+    .summary-subtext.positive { color: #10b981; }
+    .summary-subtext.negative { color: #ef4444; }
+    .summary-subtext.neutral { color: #3b82f6; }
     
-    @media (min-width: 768px) {
-        .insights-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-    }
+    .sparkline-svg { position: absolute; bottom: 0; right: 0; width: 60%; height: 50%; opacity: 0.3; pointer-events: none; }
     
-    /* Insight Cards */
-    .insight-card {
-        background-color: var(--surface);
-        border: 1px solid var(--border-color);
-        border-radius: var(--radius-lg);
-        padding: 1.5rem;
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-        transition: transform 0.2s, box-shadow 0.2s;
-    }
+    /* 2x2 Detail Grid */
+    .detail-grid { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+    @media (min-width: 1024px) { .detail-grid { grid-template-columns: repeat(2, 1fr); } }
     
-    .insight-card:hover {
-        box-shadow: var(--shadow-sm);
-        transform: translateY(-2px);
+    .detail-card {
+        background: var(--paper-card, #fff); 
+        border: 1px solid var(--border, #d1d5db) !important;
+        border-radius: 12px; padding: 1.5rem;
+        display: flex; flex-direction: column; gap: 1.25rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
+    .detail-header { display: flex; justify-content: space-between; align-items: center; }
+    .detail-title { font-size: 1.1rem; font-weight: 600; margin: 0; color: var(--text-color); }
+    .detail-footer-link {
+        font-size: 0.9rem; color: #8b5cf6; text-decoration: none; font-weight: 500;
+        display: inline-flex; align-items: center; gap: 0.25rem; margin-top: auto; padding-top: 1rem;
+    }
+    .detail-footer-link:hover { text-decoration: underline; }
     
-    .insight-card-header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-    }
+    /* Category Chart & Legend */
+    .category-layout { display: flex; align-items: center; gap: 2rem; flex-wrap: wrap; }
+    .category-chart-container { width: 180px; height: 180px; position: relative; flex-shrink: 0; }
+    .category-legend { flex: 1; display: flex; flex-direction: column; gap: 0.85rem; min-width: 200px; }
+    .legend-item { display: flex; align-items: center; font-size: 0.9rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; margin-right: 0.75rem; }
+    .legend-name { color: var(--text-color); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+    .legend-amount { font-weight: 600; color: var(--text-color); margin-right: 1rem; }
+    .legend-percent { color: var(--text-muted); font-size: 0.8rem; width: 40px; text-align: right; }
     
-    .insight-icon-box {
-        width: 40px;
-        height: 40px;
-        border-radius: var(--radius-md);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-    }
+    /* Trend Chart */
+    .trend-chart-container { height: 220px; width: 100%; position: relative; }
     
-    .insight-card-title {
-        font-weight: 600;
-        font-size: 1.1rem;
-        margin: 0;
-        color: var(--text-color);
+    /* AI Insights List */
+    .insights-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1.25rem; }
+    .insight-list-item { display: flex; gap: 1rem; align-items: flex-start; }
+    .insight-list-icon {
+        width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
     }
+    .insight-list-text { font-size: 0.95rem; color: var(--text-color); line-height: 1.5; padding-top: 0.25rem; }
     
-    .insight-card-body {
-        color: var(--text-secondary);
-        line-height: 1.5;
-        font-size: 0.95rem;
+    /* Smart Recommendations List */
+    .recommendations-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1rem; }
+    .rec-card {
+        border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 1rem;
+        display: flex; gap: 1rem; align-items: center; background: var(--bg-body);
     }
-    
-    .insight-action-link {
-        margin-top: auto;
-        color: var(--primary);
-        font-weight: 500;
-        text-decoration: none;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.25rem;
-        font-size: 0.9rem;
+    .rec-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .rec-content { flex: 1; }
+    .rec-title { font-size: 0.95rem; font-weight: 600; margin: 0 0 0.25rem 0; color: var(--text-color); }
+    .rec-text { font-size: 0.85rem; color: var(--text-muted); margin: 0; line-height: 1.4; }
+    .rec-badge { padding: 0.35rem 0.6rem; border-radius: var(--radius-sm); font-size: 0.85rem; font-weight: 600; white-space: nowrap; }
+
+    /* Empty State */
+    .empty-state-container {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center; padding: 4rem 1rem; background: var(--surface); border: 1px dashed var(--border-color);
+        border-radius: var(--radius-lg); margin-top: 2rem;
     }
-    
-    .insight-action-link:hover {
-        text-decoration: underline;
+    .empty-state-icon {
+        width: 64px; height: 64px; border-radius: 50%; background: var(--bg-body); border: 1px solid var(--border-color);
+        display: flex; align-items: center; justify-content: center; margin-bottom: 1.5rem; color: var(--text-muted);
     }
+    .empty-state-title { margin: 0 0 0.5rem; color: var(--text-color); font-size: 1.25rem; font-weight: 600; }
+    .empty-state-text { color: var(--text-muted); margin: 0 0 1.5rem; font-size: 0.95rem; max-width: 400px; }
+    .empty-state-btn {
+        background: #8b5cf6; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: var(--radius-md);
+        font-weight: 500; font-size: 0.95rem; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+    }
+    .empty-state-btn:hover { background: #7c3aed; }
 </style>
 {% endblock %}
 
 {% block content %}
-
 <section class="insights-section">
+    <!-- Header -->
     <div class="insights-header">
         <div class="insights-header-copy">
-            <h1 class="insights-title">AI Insights</h1>
-            <p class="insights-subtitle">Personalized spending patterns and recommendations powered by AI.</p>
+            <div class="insights-title-row">
+                <div class="insights-title-icon"><i data-lucide="sparkles" width="24" height="24"></i></div>
+                <h1 class="insights-title">AI Insights</h1>
+            </div>
+            <p class="insights-subtitle">Personalized spending patterns and smart recommendations powered by AI</p>
+        </div>
+        <form id="insightsFilterForm" method="GET" action="{{ url_for('insights') }}" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <input type="hidden" name="trend_period" id="hiddenTrendPeriod" value="{{ report.filter_info.trend_period }}">
+            
+            <label style="display: flex; align-items: center; gap: 0.25rem;">
+                <span style="font-size: 0.85rem; color: var(--text-muted);">From</span>
+                <input type="date" name="date_from" value="{{ report.filter_info.date_from or '' }}" class="date-selector-btn" onchange="this.form.submit()">
+            </label>
+            <label style="display: flex; align-items: center; gap: 0.25rem;">
+                <span style="font-size: 0.85rem; color: var(--text-muted);">To</span>
+                <input type="date" name="date_to" value="{{ report.filter_info.date_to or '' }}" class="date-selector-btn" onchange="this.form.submit()">
+            </label>
+            {% if report.filter_info.date_from or report.filter_info.date_to %}
+            <a href="{{ url_for('insights') }}" style="font-size: 0.85rem; color: var(--text-muted); text-decoration: none; padding: 0.35rem;">Clear</a>
+            {% endif %}
+        </form>
+    </div>
+
+    {% if report.has_data %}
+    <!-- Summary Cards -->
+    <div class="summary-grid">
+        <div class="summary-card">
+            <div class="summary-header">
+                <div class="summary-icon" style="background: #8b5cf6;"><i data-lucide="trending-up" width="18" height="18"></i></div>
+                <h3 class="summary-title">Total Spent</h3>
+            </div>
+            <p class="summary-value">₹{{ "{:,.0f}".format(report.summary.total_spending) }}</p>
+            {% set total = report.summary.total_spending %}
+            {% set prev_total = report.summary.prev_total_spending %}
+            {% if prev_total > 0 %}
+                {% set diff_pct = ((total - prev_total) / prev_total * 100)|round(1) %}
+                {% if diff_pct > 0 %}
+                    <div class="summary-subtext negative">
+                        <i data-lucide="arrow-up-right" width="14" height="14"></i> {{ diff_pct }}% <span style="color: var(--text-muted); margin-left: 2px;">vs prev</span>
+                    </div>
+                {% elif diff_pct < 0 %}
+                    <div class="summary-subtext positive">
+                        <i data-lucide="arrow-down-right" width="14" height="14"></i> {{ diff_pct|abs }}% <span style="color: var(--text-muted); margin-left: 2px;">vs prev</span>
+                    </div>
+                {% else %}
+                    <div class="summary-subtext neutral">
+                        <i data-lucide="minus" width="14" height="14"></i> 0% <span style="color: var(--text-muted); margin-left: 2px;">vs prev</span>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="summary-subtext neutral">
+                    No prev data
+                </div>
+            {% endif %}
+            <svg class="sparkline-svg" viewBox="0 0 100 30" preserveAspectRatio="none">
+                <path d="M0,30 C20,20 40,25 60,10 C80,-5 90,15 100,5" fill="none" stroke="#8b5cf6" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-header">
+                <div class="summary-icon" style="background: #10b981;"><i data-lucide="wallet" width="18" height="18"></i></div>
+                <h3 class="summary-title">Top Category</h3>
+            </div>
+            <p class="summary-value">{{ report.summary.largest_expense_category }}</p>
+            <div class="summary-subtext positive">
+                ₹{{ "{:,.0f}".format(report.summary.largest_expense_amount) }}
+                {% if report.summary.total_spending > 0 %}
+                ({{ (report.summary.largest_expense_amount / report.summary.total_spending * 100)|round(1) }}%)
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-header">
+                <div class="summary-icon" style="background: #f97316;"><i data-lucide="target" width="18" height="18"></i></div>
+                <h3 class="summary-title">Potential Savings</h3>
+            </div>
+            <p class="summary-value">₹{{ "{:,.0f}".format(report.summary.potential_savings) }}</p>
+            <div class="summary-subtext neutral">
+                <i data-lucide="piggy-bank" width="14" height="14"></i> Est. ~11% of total
+            </div>
+            <svg class="sparkline-svg" viewBox="0 0 100 30" preserveAspectRatio="none">
+                <path d="M0,25 C20,25 40,30 60,15 C80,0 90,10 100,5" fill="none" stroke="#f97316" stroke-width="3" stroke-linecap="round"/>
+            </svg>
+        </div>
+        
+        <div class="summary-card">
+            <div class="summary-header">
+                <div class="summary-icon" style="background: #3b82f6;"><i data-lucide="calendar" width="18" height="18"></i></div>
+                <h3 class="summary-title">Peak Month</h3>
+            </div>
+            <p class="summary-value">{{ report.summary.highest_month_name }}</p>
+            <div class="summary-subtext neutral">
+                ₹{{ "{:,.0f}".format(report.summary.highest_month_amount) }} spent
+            </div>
         </div>
     </div>
 
-    <div class="insights-grid">
-        {% for insight in insights %}
-        <div class="insight-card">
-            <div class="insight-card-header">
-                <div class="insight-icon-box" style="background: {{ insight.accent }};">
-                    <i data-lucide="{{ insight.icon }}" width="20" height="20"></i>
+    <!-- 2x2 Detailed Grid -->
+    <div class="detail-grid">
+        
+        <!-- Spending by Category -->
+        <div class="detail-card">
+            <div class="detail-header">
+                <h2 class="detail-title">Spending by Category</h2>
+            </div>
+            <div class="category-layout">
+                <div class="category-chart-container">
+                    <canvas id="categoryDonutChart"></canvas>
                 </div>
-                <h3 class="insight-card-title">{{ insight.title }}</h3>
-            </div>
-            <div class="insight-card-body">
-                {{ insight.text }}
-            </div>
-        </div>
-        {% else %}
-        <div class="insight-card">
-            <div class="insight-card-header">
-                <div class="insight-icon-box" style="background: var(--text-muted);">
-                    <i data-lucide="info" width="20" height="20"></i>
+                <div class="category-legend">
+                    {% for cat in report.category_breakdown[:6] %}
+                    <div class="legend-item">
+                        <div class="legend-dot" style="background: {{ cat.color }};"></div>
+                        <span class="legend-name" title="{{ cat.name }}">{{ cat.name }}</span>
+                        <span class="legend-amount">₹{{ "{:,.0f}".format(cat.value) }}</span>
+                        {% set pct = (cat.value / report.summary.total_spending * 100)|round(1) if report.summary.total_spending > 0 else 0 %}
+                        <span class="legend-percent">{{ pct }}%</span>
+                    </div>
+                    {% endfor %}
+                    {% if report.category_breakdown|length > 6 %}
+                    <div class="legend-item" style="color: var(--text-muted); font-size: 0.8rem; padding-left: 1rem;">
+                        +{{ report.category_breakdown|length - 6 }} more categories
+                    </div>
+                    {% endif %}
                 </div>
-                <h3 class="insight-card-title">No Insights Available</h3>
             </div>
-            <div class="insight-card-body">
-                We need a bit more data to generate insights. Add some expenses to get started!
-            </div>
+            <a href="{{ url_for('reports') }}" class="detail-footer-link">View full report <i data-lucide="arrow-right" width="14" height="14"></i></a>
         </div>
-        {% endfor %}
+
+        <!-- Spending Trend -->
+        <div class="detail-card">
+            <div class="detail-header">
+                <h2 class="detail-title">{{ report.filter_info.trend_period | capitalize }} Trend</h2>
+                <select name="trend_period_select" form="insightsFilterForm" class="dropdown-btn" onchange="document.getElementById('hiddenTrendPeriod').value = this.value; this.form.submit();">
+                    <option value="daily" {% if report.filter_info.trend_period == 'daily' %}selected{% endif %}>Daily</option>
+                    <option value="weekly" {% if report.filter_info.trend_period == 'weekly' %}selected{% endif %}>Weekly</option>
+                    <option value="monthly" {% if report.filter_info.trend_period == 'monthly' %}selected{% endif %}>Monthly</option>
+                </select>
+            </div>
+            <div class="trend-chart-container">
+                <canvas id="trendLineChart"></canvas>
+            </div>
+            <a href="{{ url_for('transactions') }}" class="detail-footer-link">View transactions <i data-lucide="arrow-right" width="14" height="14"></i></a>
+        </div>
+
+        <!-- AI Insights for You (Dynamic) -->
+        <div class="detail-card">
+            <div class="detail-header">
+                <h2 class="detail-title">AI Insights for You</h2>
+            </div>
+            <ul class="insights-list">
+                {% for insight in insights %}
+                <li class="insight-list-item">
+                    <!-- Modern color-mix for the translucent background circle -->
+                    <div class="insight-list-icon" style="background: color-mix(in srgb, {{ insight.accent }} 15%, transparent); color: {{ insight.accent }};">
+                        <i data-lucide="{{ insight.icon }}" width="18" height="18"></i>
+                    </div>
+                    <div class="insight-list-text">{{ insight.text }}</div>
+                </li>
+                {% endfor %}
+            </ul>
+            <a href="#" class="detail-footer-link">View all insights <i data-lucide="arrow-right" width="14" height="14"></i></a>
+        </div>
+
+        <!-- Smart Recommendations (Dynamic) -->
+        <div class="detail-card">
+            <div class="detail-header">
+                <h2 class="detail-title">Smart Recommendations</h2>
+            </div>
+            <ul class="recommendations-list">
+                <li class="rec-card">
+                    <div class="rec-icon" style="background: color-mix(in srgb, #f59e0b 15%, transparent); color: #f59e0b;">
+                        <i data-lucide="scissors" width="20" height="20"></i>
+                    </div>
+                    <div class="rec-content">
+                        <h4 class="rec-title">Cut back on {{ report.summary.largest_expense_category }}</h4>
+                        <p class="rec-text">This is your highest spending category at ₹{{ "{:,.0f}".format(report.summary.largest_expense_amount) }}.</p>
+                    </div>
+                    <div class="rec-badge" style="background: color-mix(in srgb, #f59e0b 15%, transparent); color: #d97706;">
+                        Focus
+                    </div>
+                </li>
+                <li class="rec-card">
+                    <div class="rec-icon" style="background: color-mix(in srgb, #10b981 15%, transparent); color: #10b981;">
+                        <i data-lucide="piggy-bank" width="20" height="20"></i>
+                    </div>
+                    <div class="rec-content">
+                        <h4 class="rec-title">Potential savings</h4>
+                        <p class="rec-text">Based on your cash flow, you could save up to 11% this month.</p>
+                    </div>
+                    <div class="rec-badge" style="background: color-mix(in srgb, #10b981 15%, transparent); color: #059669;">
+                        ₹{{ "{:,.0f}".format(report.summary.potential_savings) }}
+                    </div>
+                </li>
+                <li class="rec-card">
+                    <div class="rec-icon" style="background: color-mix(in srgb, #3b82f6 15%, transparent); color: #3b82f6;">
+                        <i data-lucide="target" width="20" height="20"></i>
+                    </div>
+                    <div class="rec-content">
+                        <h4 class="rec-title">Set a monthly limit</h4>
+                        <p class="rec-text">Your average spending is ₹{{ "{:,.0f}".format(report.summary.avg_monthly) }} per month. Keep it below this!</p>
+                    </div>
+                    <div class="rec-badge" style="background: color-mix(in srgb, #3b82f6 15%, transparent); color: #2563eb;">
+                        Avg
+                    </div>
+                </li>
+            </ul>
+            <a href="#" class="detail-footer-link">View all recommendations <i data-lucide="arrow-right" width="14" height="14"></i></a>
+        </div>
     </div>
+    
+    {% else %}
+    <!-- Empty State for new users with no data -->
+    <div class="empty-state-container">
+        <div class="empty-state-icon">
+            <i data-lucide="pie-chart" width="32" height="32"></i>
+        </div>
+        <h2 class="empty-state-title">No Insights Available Yet</h2>
+        <p class="empty-state-text">Add some expenses to unlock personalized AI-powered insights, spending trends, and smart recommendations.</p>
+        <a href="{{ url_for('expenses') }}" class="empty-state-btn">
+            <i data-lucide="plus" width="18" height="18"></i> Add Your First Expense
+        </a>
+    </div>
+    {% endif %}
 </section>
-
 {% endblock %}
 
 {% block scripts %}
-<script>lucide.createIcons();</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    lucide.createIcons();
+    
+    // Initialize charts when DOM is loaded, but only if we have data
+    {% if report.has_data %}
+    document.addEventListener('DOMContentLoaded', function() {
+        
+        // --- 1. Donut Chart ---
+        const donutCtx = document.getElementById('categoryDonutChart');
+        if (donutCtx) {
+            const rawCatData = {{ report.category_breakdown | tojson | safe }} || [];
+            // We'll show top 6 and group the rest into "Others" to keep chart clean
+            let plotLabels = [];
+            let plotData = [];
+            let plotColors = [];
+            
+            rawCatData.slice(0, 6).forEach(c => {
+                plotLabels.push(c.name);
+                plotData.push(c.value);
+                plotColors.push(c.color);
+            });
+            
+            if (rawCatData.length > 6) {
+                const othersSum = rawCatData.slice(6).reduce((sum, c) => sum + c.value, 0);
+                plotLabels.push('Others');
+                plotData.push(othersSum);
+                plotColors.push('#9ca3af'); // Gray for others
+            }
+            
+            const totalSpent = {{ report.summary.total_spending }};
+            const formattedTotal = '₹' + totalSpent.toLocaleString('en-IN');
+            
+            new Chart(donutCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: plotLabels,
+                    datasets: [{
+                        data: plotData,
+                        backgroundColor: plotColors,
+                        borderWidth: 2,
+                        borderColor: getComputedStyle(document.body).getPropertyValue('--surface').trim() || '#ffffff',
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ₹' + context.raw.toLocaleString('en-IN');
+                                }
+                            }
+                        }
+                    }
+                },
+                plugins: [{
+                    id: 'centerText',
+                    beforeDraw: function(chart) {
+                        const width = chart.width;
+                        const height = chart.height;
+                        const ctx = chart.ctx;
+                        
+                        ctx.restore();
+                        const textColor = getComputedStyle(document.body).getPropertyValue('--text-color').trim() || '#333';
+                        const mutedColor = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#666';
+                        
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        
+                        // Amount
+                        ctx.font = 'bold 1.1rem sans-serif';
+                        ctx.fillStyle = textColor;
+                        ctx.fillText(formattedTotal, width / 2, height / 2 - 10);
+                        
+                        // "Total" label
+                        ctx.font = 'normal 0.8rem sans-serif';
+                        ctx.fillStyle = mutedColor;
+                        ctx.fillText('Total', width / 2, height / 2 + 10);
+                        
+                        ctx.save();
+                    }
+                }]
+            });
+        }
+        
+        // --- 2. Line Chart ---
+        const lineCtx = document.getElementById('trendLineChart');
+        if (lineCtx) {
+            const rawTrendData = {{ report.monthly_trend | tojson | safe }} || [];
+            const trendLabels = rawTrendData.map(t => t.label);
+            const trendData = rawTrendData.map(t => t.amount);
+            
+            // Create gradient
+            const ctx = lineCtx.getContext('2d');
+            const gradient = ctx.createLinearGradient(0, 0, 0, 220);
+            gradient.addColorStop(0, 'rgba(139, 92, 246, 0.4)'); // Purple with opacity
+            gradient.addColorStop(1, 'rgba(139, 92, 246, 0.0)');
+            
+            const textColor = getComputedStyle(document.body).getPropertyValue('--text-muted').trim() || '#666';
+            const gridColor = getComputedStyle(document.body).getPropertyValue('--border-color').trim() || '#e5e7eb';
+            
+            new Chart(lineCtx, {
+                type: 'line',
+                data: {
+                    labels: trendLabels.length ? trendLabels : ['No Data'],
+                    datasets: [{
+                        label: 'Spending',
+                        data: trendData.length ? trendData : [0],
+                        borderColor: '#8b5cf6',
+                        backgroundColor: gradient,
+                        borderWidth: 2,
+                        pointBackgroundColor: '#8b5cf6',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        pointRadius: 4,
+                        pointHoverRadius: 6,
+                        fill: true,
+                        tension: 0.4 // Smooth curves
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' ₹' + context.raw.toLocaleString('en-IN');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: {
+                                color: textColor,
+                                font: { size: 11 },
+                                maxTicksLimit: 7
+                            },
+                            border: { display: false }
+                        },
+                        y: {
+                            grid: { 
+                                color: gridColor,
+                                drawBorder: false,
+                            },
+                            ticks: {
+                                color: textColor,
+                                font: { size: 11 },
+                                callback: function(value) {
+                                    if (value === 0) return '₹0';
+                                    return '₹' + (value / 1000) + 'K';
+                                },
+                                maxTicksLimit: 5
+                            },
+                            border: { display: false },
+                            beginAtZero: true
+                        }
+                    }
+                }
+            });
+        }
+    });
+    {% endif %}
+</script>
 {% endblock %}
