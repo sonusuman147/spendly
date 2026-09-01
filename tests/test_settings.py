@@ -521,7 +521,7 @@ class TestAppearanceAppliedAcrossPages:
         """Consistency: the saved theme/accent must apply on every page."""
         self._login(client)
         db.update_user_settings(1, theme="system", accent_color="purple")
-        for url in ("/", "/profile", "/transactions", "/settings"):
+        for url in ("/", "/dashboard", "/transactions", "/settings"):
             resp = client.get(url)
             assert resp.status_code in (200, 302), url
             if resp.status_code == 200:
@@ -616,7 +616,7 @@ class TestActiveSessions:
         # The legitimate user revokes that device.
         db.revoke_user_session_by_token("stolen-device")
         # The stolen device is now signed out on its next request.
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 302
         assert "/login" in resp.headers["Location"]
         follow = client.get("/login")
@@ -633,7 +633,7 @@ class TestActiveSessions:
             sess["user_id"] = 1
             sess["user_name"] = "Demo User"
             sess["session_id"] = "ghost-token"
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 302
         assert "/login" in resp.headers["Location"]
 # =================================================================== #

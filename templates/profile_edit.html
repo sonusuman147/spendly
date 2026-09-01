@@ -7,7 +7,7 @@
 {% block breadcrumb %}
 <span>Home</span>
 <span class="app-breadcrumb-sep">/</span>
-<a href="{{ url_for('profile') }}" class="app-breadcrumb-link">Dashboard</a>
+<a href="{{ url_for('dashboard') }}" class="app-breadcrumb-link">Dashboard</a>
 <span class="app-breadcrumb-sep">/</span>
 <span class="app-breadcrumb-current">Edit Profile</span>
 {% endblock %}
@@ -31,7 +31,7 @@
 
         <!-- Page Header -->
         <div class="edit-page-header">
-            <a href="{{ url_for('profile') }}" class="edit-back-link">
+            <a href="{{ url_for('dashboard') }}" class="edit-back-link">
                 <i data-lucide="arrow-left" class="edit-icon-sm"></i>
                 Back to Profile
             </a>
@@ -164,7 +164,7 @@
 
             <!-- Footer Bar -->
             <div class="edit-footer-bar">
-                <a href="{{ url_for('profile') }}" class="edit-btn-cancel">
+                <a href="{{ url_for('dashboard') }}" class="edit-btn-cancel">
                     <i data-lucide="x" class="edit-icon-sm"></i>
                     Cancel
                 </a>

@@ -48,17 +48,17 @@
         <!-- ============ Filter Bar ============ -->
         <div class="filter-bar">
             <div class="filter-quick-buttons">
-                <a href="{{ url_for('profile', period='all') }}"
+                <a href="{{ url_for('dashboard', period='all') }}"
                    class="filter-btn {% if selected_period == 'all' %}filter-btn-active{% endif %}">All Time</a>
-                <a href="{{ url_for('profile', period='1m') }}"
+                <a href="{{ url_for('dashboard', period='1m') }}"
                    class="filter-btn {% if selected_period == '1m' %}filter-btn-active{% endif %}">This Month</a>
-                <a href="{{ url_for('profile', period='3m') }}"
+                <a href="{{ url_for('dashboard', period='3m') }}"
                    class="filter-btn {% if selected_period == '3m' %}filter-btn-active{% endif %}">Last 3 Months</a>
-                <a href="{{ url_for('profile', period='6m') }}"
+                <a href="{{ url_for('dashboard', period='6m') }}"
                    class="filter-btn {% if selected_period == '6m' %}filter-btn-active{% endif %}">Last 6 Months</a>
             </div>
             <div class="filter-separator"></div>
-            <form class="filter-date-form" method="GET" action="{{ url_for('profile') }}">
+            <form class="filter-date-form" method="GET" action="{{ url_for('dashboard') }}">
                 <div class="filter-date-inputs">
                     <label class="filter-date-label">
                         <span class="filter-date-text">Start</span>
@@ -211,7 +211,7 @@
         <div class="quick-actions">
             <h3 class="quick-actions-title">Quick Actions</h3>
             <div class="quick-actions-grid">
-                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                <a href="{{ url_for('budgets') }}" class="quick-action-card">
                     <div class="quick-action-icon" style="--qa-accent: var(--accent)">
                         <i data-lucide="piggy-bank"></i>
                     </div>
@@ -219,9 +219,8 @@
                         <h4 class="quick-action-name">Budgets</h4>
                         <p class="quick-action-desc">Set monthly spending limits and stay in control.</p>
                     </div>
-                    <span class="quick-action-badge">Soon</span>
                 </a>
-                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                <a href="{{ url_for('goals') }}" class="quick-action-card">
                     <div class="quick-action-icon" style="--qa-accent: var(--success)">
                         <i data-lucide="target"></i>
                     </div>
@@ -229,9 +228,8 @@
                         <h4 class="quick-action-name">Goals</h4>
                         <p class="quick-action-desc">Save toward what matters with measurable goals.</p>
                     </div>
-                    <span class="quick-action-badge">Soon</span>
                 </a>
-                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                <a href="{{ url_for('reports') }}" class="quick-action-card">
                     <div class="quick-action-icon" style="--qa-accent: var(--accent-2)">
                         <i data-lucide="bar-chart-3"></i>
                     </div>
@@ -239,9 +237,8 @@
                         <h4 class="quick-action-name">Reports</h4>
                         <p class="quick-action-desc">Dive deep into trends with detailed reporting.</p>
                     </div>
-                    <span class="quick-action-badge">Soon</span>
                 </a>
-                <a href="#" class="quick-action-card" aria-disabled="true" title="Coming soon">
+                <a href="{{ url_for('insights') }}" class="quick-action-card">
                     <div class="quick-action-icon" style="--qa-accent: var(--bar-shopping)">
                         <i data-lucide="sparkles"></i>
                     </div>
@@ -249,7 +246,6 @@
                         <h4 class="quick-action-name">Insights</h4>
                         <p class="quick-action-desc">Uncover patterns and smart ways to save.</p>
                     </div>
-                    <span class="quick-action-badge">Soon</span>
                 </a>
             </div>
         </div>

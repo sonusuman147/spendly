@@ -117,7 +117,7 @@ class TestProfileRoute:
 
     def test_redirect_unauthenticated(self, client):
         """GET /profile without session should redirect to /login."""
-        resp = client.get("/profile", follow_redirects=False)
+        resp = client.get("/dashboard", follow_redirects=False)
         assert resp.status_code == 302
         assert resp.location.endswith("/login") or "/login" in resp.location
 
@@ -125,14 +125,14 @@ class TestProfileRoute:
         """GET /profile while logged in should return 200."""
         with client.session_transaction() as sess:
             sess["user_id"] = 1
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 200
 
     def test_authenticated_shows_user_name(self, client):
         """Profile page should display the logged-in user's name."""
         with client.session_transaction() as sess:
             sess["user_id"] = 1
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 200
         assert b"Demo User" in resp.data
 
@@ -140,7 +140,7 @@ class TestProfileRoute:
         """Profile page should display the logged-in user's email."""
         with client.session_transaction() as sess:
             sess["user_id"] = 1
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 200
         assert b"demo@spendly.com" in resp.data
 
@@ -148,7 +148,7 @@ class TestProfileRoute:
         """Profile page should display the ₹ symbol on amounts."""
         with client.session_transaction() as sess:
             sess["user_id"] = 1
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 200
         assert b"\xe2\x82\xb9" in resp.data  # UTF-8 bytes for ₹
 
@@ -156,7 +156,7 @@ class TestProfileRoute:
         """Profile page should show 'Member since' with formatted date."""
         with client.session_transaction() as sess:
             sess["user_id"] = 1
-        resp = client.get("/profile")
+        resp = client.get("/dashboard")
         assert resp.status_code == 200
         assert b"Member since" in resp.data
 
@@ -164,7 +164,20 @@ class TestProfileRoute:
         """A session with a non-existent user_id should be cleared."""
         with client.session_transaction() as sess:
             sess["user_id"] = 9999
-        resp = client.get("/profile", follow_redirects=False)
+        resp = client.get("/dashboard", follow_redirects=False)
         assert resp.status_code == 302
         assert "/login" in resp.location
 
+
+
+class TestInsightsRoute:
+    def test_unauthenticated_redirect(self, client):
+        resp = client.get('/insights', follow_redirects=False)
+        assert resp.status_code == 302
+        assert '/login' in resp.location
+
+    def test_authenticated_returns_200(self, client):
+        with client.session_transaction() as sess:
+            sess['user_id'] = 1
+        resp = client.get('/insights')
+        assert resp.status_code == 200

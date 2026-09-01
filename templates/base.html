@@ -36,7 +36,7 @@
 
             <!-- Logo row -->
             <div class="sidebar-brand">
-                <a href="{{ url_for('profile') }}" class="sidebar-logo" aria-label="Spendly dashboard">
+                <a href="{{ url_for('dashboard') }}" class="sidebar-logo" aria-label="Spendly dashboard">
                     <span class="sidebar-logo-mark">◈</span>
                     <span class="sidebar-logo-text">Spendly</span>
                 </a>
@@ -65,7 +65,7 @@
                 <p class="sidebar-nav-label">Menu</p>
                 <ul class="sidebar-menu">
                     <li>
-                        <a href="{{ url_for('profile') }}" class="sidebar-link {% if request.endpoint == 'profile' %}active{% endif %}">
+                        <a href="{{ url_for('dashboard') }}" class="sidebar-link {% if request.endpoint == 'dashboard' %}active{% endif %}">
                             <i data-lucide="layout-dashboard" class="sidebar-link-icon"></i>
                             <span class="sidebar-link-text">Dashboard</span>
                         </a>
@@ -211,7 +211,7 @@
                                 <strong>{{ shell_name }}</strong>
                                 <span>{{ user.email if user else (session.get('user_email') or '') }}</span>
                             </div>
-                            <a href="{{ url_for('profile') }}" class="app-profile-menu-item">
+                            <a href="{{ url_for('dashboard') }}" class="app-profile-menu-item">
                                 <i data-lucide="user" class="app-profile-menu-icon"></i>
                                 My Dashboard
                             </a>
@@ -305,7 +305,7 @@
             <div class="nav-links">
                 {% if session.user_id %}
                 <a href="{{ url_for('list_expenses') }}">Expenses</a>
-                <a href="{{ url_for('profile') }}">Dashboard</a>
+                <a href="{{ url_for('dashboard') }}">Dashboard</a>
                 <a href="{{ url_for('logout') }}" class="nav-signout">
                     <i data-lucide="log-out" class="btn-icon"></i>
                     Sign out

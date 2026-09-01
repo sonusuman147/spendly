@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+
+{% block title %}Insights — Spendly{% endblock %}
+
+{% block page_title %}Insights{% endblock %}
+
+{% block breadcrumb %}
+<span>Home</span>
+<span class="app-breadcrumb-sep">/</span>
+<span class="app-breadcrumb-current">Insights</span>
+{% endblock %}
+
+{% block head %}
+<style>
+    /* Styling specifically for Insights page */
+    .insights-section {
+        max-width: var(--max-width);
+        margin: 0 auto;
+        padding: 0 1rem 3rem;
+    }
+    
+    .insights-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        gap: 1rem;
+    }
+    
+    .insights-title {
+        font-size: 2rem;
+        font-weight: 700;
+        margin: 0 0 0.5rem;
+        color: var(--text-color);
+        letter-spacing: -0.02em;
+    }
+    
+    .insights-subtitle {
+        color: var(--text-muted);
+        font-size: 1.05rem;
+        margin: 0;
+    }
+    
+    /* Layout for Insights grid */
+    .insights-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    
+    @media (min-width: 768px) {
+        .insights-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    /* Insight Cards */
+    .insight-card {
+        background-color: var(--surface);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-lg);
+        padding: 1.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    
+    .insight-card:hover {
+        box-shadow: var(--shadow-sm);
+        transform: translateY(-2px);
+    }
+    
+    .insight-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    
+    .insight-icon-box {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-md);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+    
+    .insight-card-title {
+        font-weight: 600;
+        font-size: 1.1rem;
+        margin: 0;
+        color: var(--text-color);
+    }
+    
+    .insight-card-body {
+        color: var(--text-secondary);
+        line-height: 1.5;
+        font-size: 0.95rem;
+    }
+    
+    .insight-action-link {
+        margin-top: auto;
+        color: var(--primary);
+        font-weight: 500;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.9rem;
+    }
+    
+    .insight-action-link:hover {
+        text-decoration: underline;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<section class="insights-section">
+    <div class="insights-header">
+        <div class="insights-header-copy">
+            <h1 class="insights-title">AI Insights</h1>
+            <p class="insights-subtitle">Personalized spending patterns and recommendations powered by AI.</p>
+        </div>
+    </div>
+
+    <div class="insights-grid">
+        {% for insight in insights %}
+        <div class="insight-card">
+            <div class="insight-card-header">
+                <div class="insight-icon-box" style="background: {{ insight.accent }};">
+                    <i data-lucide="{{ insight.icon }}" width="20" height="20"></i>
+                </div>
+                <h3 class="insight-card-title">{{ insight.title }}</h3>
+            </div>
+            <div class="insight-card-body">
+                {{ insight.text }}
+            </div>
+        </div>
+        {% else %}
+        <div class="insight-card">
+            <div class="insight-card-header">
+                <div class="insight-icon-box" style="background: var(--text-muted);">
+                    <i data-lucide="info" width="20" height="20"></i>
+                </div>
+                <h3 class="insight-card-title">No Insights Available</h3>
+            </div>
+            <div class="insight-card-body">
+                We need a bit more data to generate insights. Add some expenses to get started!
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script>lucide.createIcons();</script>
+{% endblock %}

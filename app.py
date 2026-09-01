@@ -8,7 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from authlib.integrations.flask_client import OAuth
 from database.db import (
     get_db, init_db, seed_db, get_user_by_email, create_user,
-    get_user_by_id, get_user_expenses_summary, get_user_by_google_id,
+    get_user_by_id, get_user_expenses_summary, get_user_by_google_id, get_report_data,
     link_google_account, CATEGORIES, SECURITY_QUESTIONS,
     PAYMENT_METHODS, DEFAULT_PAYMENT_METHOD, SORT_OPTIONS,
     update_user_profile, update_password, get_user_by_email_with_security,
@@ -308,7 +308,7 @@ def login():
         session["user_name"] = user["name"]
         _record_login_session(user["id"])
         flash("Welcome back!", "success")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     return render_template("login.html")
 
@@ -571,8 +571,8 @@ def logout():
 # Profile routes                                                      #
 # ------------------------------------------------------------------ #
 
-@app.route("/profile")
-def profile():
+@app.route("/dashboard")
+def dashboard():
     """Render the profile page with user info and expense summary.
 
     Supports optional date filtering via GET query parameters:
@@ -639,7 +639,7 @@ def profile():
 
     summary = get_user_expenses_summary(session["user_id"], start_date=start_date, end_date=end_date)
     return render_template(
-        "profile.html",
+        "dashboard.html",
         user=user,
         summary=summary,
         selected_period=period,
@@ -662,17 +662,17 @@ def profile_update():
 
     if not name or not email or "@" not in email:
         flash("Valid name and email are required.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     try:
         update_user_profile(session["user_id"], name, email)
     except sqlite3.IntegrityError:
         flash("Email is already registered by another user.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     session["user_name"] = name
     flash("Profile updated successfully!", "success")
-    return redirect(url_for("profile"))
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/profile/change-password", methods=["POST"])
@@ -691,15 +691,15 @@ def profile_change_password():
     # Validate inputs
     if not current_password or not new_password or not confirm_new_password:
         flash("All password fields are required.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     if new_password != confirm_new_password:
         flash("New passwords do not match.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     if len(new_password) < 8:
         flash("New password must be at least 8 characters.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     # Verify current password
     user = get_user_by_id(session["user_id"])
@@ -711,12 +711,12 @@ def profile_change_password():
     full_user = get_user_by_email(user["email"])
     if full_user is None or not check_password_hash(full_user["password_hash"], current_password):
         flash("Current password is incorrect.", "error")
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     # Update password
     update_password(session["user_id"], generate_password_hash(new_password))
     flash("Password changed successfully!", "success")
-    return redirect(url_for("profile"))
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/profile/edit", methods=["GET", "POST"])
@@ -782,7 +782,7 @@ def profile_edit():
         else:
             flash("Profile updated successfully!", "success")
 
-        return redirect(url_for("profile"))
+        return redirect(url_for("dashboard"))
 
     return render_template("profile_edit.html", user=user)
 
@@ -1895,6 +1895,30 @@ def reports():
         ]),
         insights_enabled=insights_enabled,
     )
+
+
+# ------------------------------------------------------------------ #
+# Insights routes                                                      #
+# ------------------------------------------------------------------ #
+
+@app.route("/insights")
+def insights():
+    """Render the AI Insights dashboard.
+    Requires authentication.
+    """
+    if "user_id" not in session:
+        return redirect(url_for("login"))
+    
+    user_id = session["user_id"]
+    user = get_user_by_id(user_id)
+    if not user:
+        session.clear()
+        return redirect(url_for("login"))
+        
+    report_data = get_report_data(user_id)
+    insights_data = report_data.get("insights", [])
+        
+    return render_template("insights.html", user=user, insights=insights_data)
 
 
 # ------------------------------------------------------------------ #
